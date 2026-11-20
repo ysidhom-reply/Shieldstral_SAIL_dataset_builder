@@ -1,0 +1,66 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+build/
+dist/
+wheels/
+.eggs/
+
+# --- Virtual environments (uv creates .venv) ---
+.venv/
+venv/
+env/
+
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Testing / coverage / tooling caches ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+.ruff_cache/
+.mypy_cache/
+.pyright/
+.tox/
+.nox/
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Data (keep folder structure, ignore contents) ---
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# --- Large / binary dataset formats ---
+*.parquet
+*.arrow
+*.h5
+*.hdf5
+*.pkl
+*.zip
+*.tar.gz
+
+# --- Logs ---
+logs/
+*.log
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Claude Code local settings ---
+.claude/settings.local.json
