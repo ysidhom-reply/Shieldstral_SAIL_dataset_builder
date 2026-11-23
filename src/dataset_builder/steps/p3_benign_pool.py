@@ -289,6 +289,8 @@ class Pool:
     rounds: int = 0
     # Valid texts (filters 1-3 passed) set aside by the size cap; used by the final top-up.
     spares: list[tuple[str, dict]] = field(default_factory=list)
+    target: int = 20  # texts this pool must reach (25 for extended test pools)
+    mix: dict[str, int] | None = None  # size mix asked for (None = p3.mix)
 
     @property
     def key(self) -> tuple[str, str]:
@@ -309,6 +311,7 @@ class RunState:
     judge_modes: Counter = field(default_factory=Counter)  # (scenario, mode) -> texts judged
     topped_up: dict[tuple[str, str], int] = field(default_factory=dict)  # pool -> texts added
     accepted_short: list = field(default_factory=list)  # (pool, ShortPoolCfg, P4 need)
+    extended: dict[tuple[str, str], int] = field(default_factory=dict)  # pool -> texts added
     attacks: AttackIndex | None = None
     tokens: Counter = field(default_factory=Counter)  # (model, scenario, calls|in|out) -> n
 
@@ -363,7 +366,7 @@ def generate_round(
     progress = Progress(f"round {round_} generation", len(pools))
 
     def call(pool: Pool) -> tuple[Pool, Completion, dict, int, bool]:
-        missing = p3.n - len(pool.accepted)
+        missing = pool.target - len(pool.accepted)
         targets = p3.lengths[group_of(pool.doc["scenario"])]
         have = Counter(length_bucket(a["text"], targets) for a in pool.accepted)
         # Regeneration asks for `regen_extra` more texts than missing, spread over the sizes
@@ -372,9 +375,9 @@ def generate_round(
         # to the judge, so the extra texts cost generator tokens only.
         request = missing if not pool.accepted else missing + p3.regen_extra
         counts = (
-            dict(p3.mix)
+            dict(pool.mix or p3.mix)
             if not pool.accepted
-            else bucket_request(request, have, dict(p3.mix), p3.mix_cap)
+            else bucket_request(request, have, dict(pool.mix or p3.mix), p3.mix_cap)
         )
         existing = [a["text"] for a in pool.accepted]
         messages, truncated = build_messages(
@@ -393,8 +396,9 @@ def generate_round(
 
     out = []
     for pool, c, dec, requested, truncated in results:
-        missing = p3.n - len(pool.accepted)
-        pool.rounds = round_
+        missing = pool.target - len(pool.accepted)
+        if isinstance(round_, int):
+            pool.rounds = round_
         state.truncated += int(truncated and round_ == 1)
         meta = _gen_meta(cfg, prompts, dec, c, round_)
         s, p = pool.doc["scenario"], pool.position
@@ -487,7 +491,7 @@ def judge_round(
         if flagged:
             _reject(state, pool, 4, reason, text, jmeta)
             continue
-        if len(pool.accepted) >= cfg.p3.n:
+        if len(pool.accepted) >= pool.target:
             state.surplus += 1
             continue
         h = hashlib.sha1(f"{pool.doc['doc_id']}|{p}|{text}".encode()).hexdigest()[:16]
@@ -580,13 +584,13 @@ def top_up(
     2,637 pools 1-2 texts short, all with medium at the cap, because the model kept writing
     medium texts when asked for short or long ones; over 20,000 such texts were set aside.
     """
-    short = [pl for pl in pools if len(pl.accepted) < cfg.p3.n]
+    short = [pl for pl in pools if len(pl.accepted) < pl.target]
     cands = []
     for pl in short:
         seen = [a["text"] for a in pl.accepted]
         picked: list[tuple[str, dict]] = []
         for text, meta in pl.spares:
-            if len(picked) >= cfg.p3.n - len(pl.accepted) + 2:  # +2 in case the judge flags one
+            if len(picked) >= pl.target - len(pl.accepted) + 2:  # +2 in case the judge flags one
                 break
             if check_duplicate(text, seen, cfg.p3.near_dup_ratio) is None:
                 seen.append(text)
@@ -601,6 +605,47 @@ def top_up(
         added = len(pl.accepted) - before[pl.key]
         if added:
             state.topped_up[pl.key] = added
+
+
+def extend_pools(
+    pools: list[Pool],
+    client: MistralClient,
+    judge_model: str,
+    prompts: dict,
+    cfg: Config,
+    state: RunState,
+    shieldstral_checked: bool,
+) -> None:
+    """Extend the pools of some splits/scenarios to `p3.extension.target_n` texts.
+
+    Runs after the normal rounds and the top-up, so those stay exactly as before (cached). New
+    texts come from the same generator, filters and judge, with the "do not repeat" list of the
+    texts already in the pool; the size mix asked for leans long. Why: a test email/table pool
+    serves 25 attacked samples (75 attacks over 3 positions) but had 20 texts, so P4 had to
+    reuse texts, and a reused text gives an identical negative row (6,436 duplicates in test).
+    """
+    ext = cfg.p3.extension
+    chosen = [
+        pl for pl in pools if pl.doc["split"] in ext.splits and pl.doc["scenario"] in ext.scenarios
+    ]
+    if not chosen:
+        return
+    before = {pl.key: len(pl.accepted) for pl in chosen}
+    for pl in chosen:
+        pl.target = ext.target_n
+        pl.mix = dict(ext.mix)
+    logger.info("P3 extension: %d pools to %d texts", len(chosen), ext.target_n)
+    for k in range(1, ext.max_rounds + 1):
+        todo = [pl for pl in chosen if len(pl.accepted) < pl.target]
+        if not todo:
+            break
+        label = f"ext{k}"
+        logger.info("P3 extension round %d: %d pools need texts", k, len(todo))
+        cands = generate_round(todo, label, client, prompts, cfg, state)
+        judge_round(cands, client, judge_model, prompts, cfg, state, shieldstral_checked, label)
+    if cfg.p3.top_up_from_spares:
+        top_up(chosen, client, judge_model, prompts, cfg, state, shieldstral_checked)
+    state.extended = {pl.key: len(pl.accepted) - before[pl.key] for pl in chosen}
 
 
 def control_items(attacks: list[dict[str, Any]], cfg: Config) -> list[tuple[dict, str]]:
@@ -795,9 +840,9 @@ def run(
     shieldstral_checked, shieldstral_note = shieldstral_available(cfg)
 
     state = RunState(attacks=AttackIndex.build(attacks, p3.attack_overlap_words))
-    pools = [Pool(d, p) for d in docs for p in POSITIONS]
+    pools = [Pool(d, p, target=p3.n) for d in docs for p in POSITIONS]
     for round_ in range(1, max_rounds + 2):  # round 1 + max_rounds regeneration rounds
-        todo = [pl for pl in pools if len(pl.accepted) < p3.n]
+        todo = [pl for pl in pools if len(pl.accepted) < pl.target]
         if not todo:
             break
         logger.info("P3 round %d: %d pools need texts", round_, len(todo))
@@ -805,6 +850,8 @@ def run(
         judge_round(cands, client, judge["id"], prompts, cfg, state, shieldstral_checked, round_)
     if p3.top_up_from_spares:
         top_up(pools, client, judge["id"], prompts, cfg, state, shieldstral_checked)
+    if p3.extension.target_n > p3.n:
+        extend_pools(pools, client, judge["id"], prompts, cfg, state, shieldstral_checked)
     if p3.judge_control:
         state.control = judge_control_check(client, judge["id"], attacks, prompts, cfg)
 
@@ -815,7 +862,7 @@ def run(
     # position). Any other short pool stops the step.
     allowed = {(sp.doc_id, sp.position): sp for sp in p3.accepted_short_pools}
     need = p4_need(cfg)
-    short = [pl for pl in pools if len(pl.accepted) < p3.n]
+    short = [pl for pl in pools if len(pl.accepted) < pl.target]
     unlisted = [pl for pl in short if pl.key not in allowed]
     too_few = [
         pl
@@ -1081,6 +1128,14 @@ DECISIONS: list[tuple[str, str]] = [
         "*Top-up after the last round*.",
     ),
     (
+        "**Test email/table pools extended from 20 to 25 texts** (+3,810 texts, after the normal "
+        "rounds; option B, team decision)",
+        "Found in P4: a test email/table pool serves 25 attacked samples with 20 texts, so texts "
+        "were reused, and a reused text gives an identical negative row (6,436 duplicates in "
+        "test, 30%). 25 texts give each sample its own. The extra texts lean long. Cost about "
+        "$1; the existing texts are unchanged. See *Test pool extension*.",
+    ),
+    (
         "**Two approved short pools** (`bipia-code-7f1bb6f33328` start 18, end 17; total 52,735 "
         "instead of 52,740)",
         "The top-up filled 57 of the 59 short pools. The last 2 are the Stack Overflow answer "
@@ -1097,6 +1152,78 @@ def _decisions_md() -> str:
     return "Each change from the brief or from the first plan, and why:\n\n" + _table(
         ["#", "change", "why"], rows
     )
+
+
+def _extension_section(state: RunState, cfg: Config, pools: list[Pool]) -> str:
+    ext = cfg.p3.extension
+    if ext.target_n <= cfg.p3.n:
+        return "None: every pool has the brief's size."
+    chosen = [pl for pl in pools if pl.key in state.extended]
+    added = sum(state.extended.values())
+    full = sum(len(pl.accepted) >= pl.target for pl in chosen)
+    by_s = Counter(pl.doc["scenario"] for pl in chosen)
+    new_texts = [
+        a for pl in chosen for a in pl.accepted if str(a.get("round", "")).startswith("ext")
+    ]
+    mix = Counter(a["length_bucket"] for a in new_texts)
+    return (
+        f"**Flag (team decision).** The {', '.join(ext.scenarios)} pools of the "
+        f"{', '.join(ext.splits)} split were extended from {cfg.p3.n} to **{ext.target_n} "
+        "texts**, after the normal rounds and the top-up (those are unchanged).\n\n"
+        f"- Pools extended: {len(chosen)} ("
+        + ", ".join(f"{s}: {n}" for s, n in sorted(by_s.items()))
+        + f"); reached {ext.target_n}: {full}.\n"
+        f"- Texts added: **{added}**. Size mix asked for: "
+        + ", ".join(f"{n} {b}" for b, n in ext.mix.items())
+        + " per pool (leaning long); added texts by size: "
+        + (", ".join(f"{b}: {mix[b]}" for b in BUCKETS) or "-")
+        + ".\n"
+        "- Same generator, filters 1-3 and judge as the other texts; the prompt lists the "
+        'texts already in the pool as "do not repeat". Rounds are labelled `ext1`, `ext2`, ... '
+        "in each text's `round`.\n\n"
+        "Why: a test email or table pool serves 25 attacked samples (75 test text attacks over "
+        "3 positions) but had 20 texts, so P4 had to reuse some. Within a pool the document, "
+        "position and query are the same, so a reused text gives an identical negative row: P4 "
+        "found 6,436 duplicate negatives in test (30%). With 25 texts, each attacked sample can "
+        "get its own text. The extra texts lean long because those pools lacked texts close in "
+        "length to the long attacks. Train, validation and code pools serve at most 17 samples "
+        "and keep 20 texts."
+    )
+
+
+def _notes_for_p4(state: RunState, len_rows: list[list[Any]], n: int) -> str:
+    """Carry-overs P4 must handle (requested by the team)."""
+    lines = ["Two points P4 must handle:", ""]
+    if state.accepted_short:
+        lines.append(
+            "1. **Small pools.** These approved pools have fewer than "
+            f'{n} texts. With P4\'s "least used first" picking, each text is used about once and '
+            "there is little or no spare:"
+        )
+        lines.append("")
+        for pl, _, need in state.accepted_short:
+            spare = len(pl.accepted) - need if need is not None else None
+            lines.append(
+                f"   - `{pl.key[0]}` / {pl.key[1]}: {len(pl.accepted)} texts for "
+                f"{need if need is not None else '?'} attacked samples (spare: "
+                f"{spare if spare is not None else '?'})."
+            )
+    else:
+        lines.append("1. **Small pools.** None: every pool has its full number of texts.")
+    lines += [
+        "",
+        "2. **Length gap.** Benign texts are not exactly as long as the attacks "
+        "(median; 25th-75th percentile, characters):",
+        "",
+        _table(["group", "attacks median", "attacks IQR", "benign median", "benign IQR"], len_rows),
+        "",
+        "   P4's length window (brief step 1: within 30% of the attack's length, 50% for code) "
+        "closes this gap pair by pair: each negative gets a pool text close in length to its "
+        "positive's attack, so length cannot give away the label.",
+        "",
+        "Texts flagged `over_size_cap` (top-up) are normal pool texts for P4.",
+    ]
+    return "\n".join(lines)
 
 
 def _sections(
@@ -1293,10 +1420,11 @@ def _sections(
         else "None: every pool has its full number of texts."
     )
     passed = [
-        f"- PASSED: every pool has {p3.n} accepted texts, except {n_short} approved short pools "
+        f"- PASSED: every pool has its target ({p3.n}, or {p3.extension.target_n} for extended "
+        f"pools), except {n_short} approved short pools "
         f"with enough for P4 ({len(pools)} pools, {len(accepted)} texts)"
         if n_short
-        else f"- PASSED: every pool has {p3.n} accepted texts ({len(pools)} pools, "
+        else f"- PASSED: every pool has its target number of texts ({len(pools)} pools, "
         f"{len(accepted)} texts)",
         "- PASSED: `benign_id` unique",
         "- PASSED: the generator never sees the attacks (attacks are only used by filter 2)",
@@ -1320,6 +1448,8 @@ def _sections(
         ),
         ("Top-up after the last round (flagged)", top_up_section),
         ("Accepted short pools (flagged deviation)", short_section),
+        ("Test pool extension (flagged deviation)", _extension_section(state, cfg, pools)),
+        ("Notes for P4", _notes_for_p4(state, len_rows, p3.n)),
         (
             "Rejection rate per filter",
             overall + "\n\n*Rejection rate* = rejected / texts that reached the filter. "
@@ -1442,8 +1572,9 @@ def _sections(
                         [
                             f"- **Pool size:** the brief asks for {p3.n} texts per document and "
                             f"position; {n_short} approved pools have fewer (see *Accepted short "
-                            "pools*), so the total is below "
-                            f"{len(pools) * p3.n:,} texts. Approved by the team."
+                            "pools*); the test email/table pools have more (see *Test pool "
+                            "extension*). "
+                            "Both approved by the team."
                         ]
                         if n_short
                         else []

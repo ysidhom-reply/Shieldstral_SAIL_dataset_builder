@@ -1,0 +1,130 @@
+{
+  "total": 66100,
+  "split": {
+    "test": 43100,
+    "train": 19480,
+    "validation": 3520
+  },
+  "scenario": {
+    "code": 7000,
+    "email": 7960,
+    "table": 51140
+  },
+  "label": {
+    "0": 33050,
+    "1": 33050
+  },
+  "position": {
+    "end": 22036,
+    "middle": 22032,
+    "start": 22032
+  },
+  "cross": {
+    "keys": [
+      "split",
+      "scenario",
+      "label",
+      "position"
+    ],
+    "counts": {
+      "test | code | 0 | end": 834,
+      "test | code | 0 | middle": 833,
+      "test | code | 0 | start": 833,
+      "test | code | 1 | end": 834,
+      "test | code | 1 | middle": 833,
+      "test | code | 1 | start": 833,
+      "test | email | 0 | end": 1100,
+      "test | email | 0 | middle": 1100,
+      "test | email | 0 | start": 1100,
+      "test | email | 1 | end": 1100,
+      "test | email | 1 | middle": 1100,
+      "test | email | 1 | start": 1100,
+      "test | table | 0 | end": 5250,
+      "test | table | 0 | middle": 5250,
+      "test | table | 0 | start": 5250,
+      "test | table | 1 | end": 5250,
+      "test | table | 1 | middle": 5250,
+      "test | table | 1 | start": 5250,
+      "train | code | 0 | end": 266,
+      "train | code | 0 | middle": 267,
+      "train | code | 0 | start": 267,
+      "train | code | 1 | end": 266,
+      "train | code | 1 | middle": 267,
+      "train | code | 1 | start": 267,
+      "train | email | 0 | end": 173,
+      "train | email | 0 | middle": 173,
+      "train | email | 0 | start": 174,
+      "train | email | 1 | end": 173,
+      "train | email | 1 | middle": 173,
+      "train | email | 1 | start": 174,
+      "train | table | 0 | end": 2807,
+      "train | table | 0 | middle": 2806,
+      "train | table | 0 | start": 2807,
+      "train | table | 1 | end": 2807,
+      "train | table | 1 | middle": 2806,
+      "train | table | 1 | start": 2807,
+      "validation | code | 0 | end": 67,
+      "validation | code | 0 | middle": 67,
+      "validation | code | 0 | start": 66,
+      "validation | code | 1 | end": 67,
+      "validation | code | 1 | middle": 67,
+      "validation | code | 1 | start": 66,
+      "validation | email | 0 | end": 54,
+      "validation | email | 0 | middle": 53,
+      "validation | email | 0 | start": 53,
+      "validation | email | 1 | end": 54,
+      "validation | email | 1 | middle": 53,
+      "validation | email | 1 | start": 53,
+      "validation | table | 0 | end": 467,
+      "validation | table | 0 | middle": 467,
+      "validation | table | 0 | start": 466,
+      "validation | table | 1 | end": 467,
+      "validation | table | 1 | middle": 467,
+      "validation | table | 1 | start": 466
+    }
+  },
+  "p4_bipia": {
+    "total": 66100,
+    "by_split": {
+      "train": {
+        "total": 19480,
+        "scenario": {
+          "code": 1600,
+          "email": 1040,
+          "table": 16840
+        },
+        "label": {
+          "1": 9740,
+          "0": 9740
+        }
+      },
+      "validation": {
+        "total": 3520,
+        "scenario": {
+          "code": 400,
+          "email": 320,
+          "table": 2800
+        },
+        "label": {
+          "1": 1760,
+          "0": 1760
+        }
+      },
+      "test": {
+        "total": 43100,
+        "scenario": {
+          "code": 5000,
+          "email": 6600,
+          "table": 31500
+        },
+        "label": {
+          "1": 21550,
+          "0": 21550
+        }
+      }
+    }
+  },
+  "failures": [],
+  "length_matched": 27629,
+  "pairs": 33050
+}

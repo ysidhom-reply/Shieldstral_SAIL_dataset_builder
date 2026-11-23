@@ -86,6 +86,17 @@ p3:
   # URLs). After 9 rounds and the top-up, start has 18 and end has 17 texts. That is enough for
   # P4 (test document: ~17 attacked samples per position). The step checks each listed pool has
   # at least min_texts and at least what P4 needs; any other short pool still stops the step.
+  # Extension (team decision, option B in P4): the test email/table pools go from 20 to 25 texts
+  # after the normal rounds (those stay cached and unchanged). Why: such a pool serves 25
+  # attacked samples (75 test text attacks over 3 positions); with 20 texts P4 had to reuse
+  # texts, and a reused text gives an identical negative row (6,436 duplicates in test). The
+  # extra texts lean long, the size the pools lacked. +762 pools x 5 = 3,810 texts.
+  extension:
+    target_n: 25
+    splits: [test]
+    scenarios: [email, table]
+    mix: {short: 7, medium: 9, long: 9}
+    max_rounds: 8
   accepted_short_pools:
     - doc_id: bipia-code-7f1bb6f33328
       position: start
@@ -153,6 +164,12 @@ p3:
     mistral-small: {input: 0.15, output: 0.6}
     mistral-medium: {input: 1.5, output: 7.5}
 
+p4:
+  # Brief step 1: the pool text must be within 30% of the attack's length (50% for code).
+  # When no text of the pool is in the window (~4% of positives), the closest-length text is
+  # used and the pair is flagged length_matched=false (team decision, see p4_composition.md).
+  length_window: {text: 0.30, code: 0.50}
+
 # Expected counts per step, copied from each portion's brief.
 # Shape: {step: {total: N, scenario: {...}, split: {...}, label: {...}, position: {...}}}
 expected_counts:
@@ -190,9 +207,17 @@ expected_counts:
     by_split:
       test: {total: 21550, scenario: {email: 3300, table: 15750, code: 2500}}
   # Full run only (the pilot checks 20 per pool instead): 879 documents x 3 positions x 20.
-  # 879 x 3 x 20 = 52,740 minus 5 for the two approved short pools of bipia-code-7f1bb6f33328
-  # (start 18, end 17; see p3.accepted_short_pools). Deviation approved by the team 2026-11-23.
+  # 879 x 3 x 20 = 52,740, minus 5 for the two approved short pools of bipia-code-7f1bb6f33328
+  # (start 18, end 17; see p3.accepted_short_pools), plus 3,810 for the extension of the 762 test
+  # email/table pools to 25 texts (44 + 210 documents x 3 positions x 5). Approved 2026-11-23.
   p3_benign_pool:
-    total: 52735
-    scenario: {email: 4680, table: 42060, code: 5995}
-    position: {start: 17578, middle: 17580, end: 17577}
+    total: 56545
+    scenario: {email: 5340, table: 45210, code: 5995}
+    position: {start: 18848, middle: 18850, end: 18847}
+  # P4 = 2 x P2 (one negative per positive). Test from the briefs (2 x 21,550); train and
+  # validation follow from P2 (P1 documents x 20 x 2).
+  p4_bipia:
+    by_split:
+      test: {total: 43100, scenario: {email: 6600, table: 31500, code: 5000}, label: {'0': 21550, '1': 21550}}
+      validation: {total: 3520, scenario: {email: 320, table: 2800, code: 400}, label: {'0': 1760, '1': 1760}}
+      train: {total: 19480, scenario: {email: 1040, table: 16840, code: 1600}, label: {'0': 9740, '1': 9740}}

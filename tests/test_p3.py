@@ -202,7 +202,9 @@ def setup(cfg):
     (cfg.paths.interim / ATTACKS_FILE).write_text(
         "\n".join(json.dumps(a) for a in _attacks()), "utf-8"
     )
-    return cfg
+    # The extension is tested on its own (test_extension_to_25); off for the other tests.
+    ext = cfg.p3.extension.model_copy(update={"target_n": cfg.p3.n})
+    return cfg.model_copy(update={"p3": cfg.p3.model_copy(update={"extension": ext})})
 
 
 def _client(cfg, state, **kw):
@@ -411,3 +413,22 @@ def test_short_pools_only_if_approved(setup):
     cfg = setup.model_copy(update={"p3": p3cfg.model_copy(update={"accepted_short_pools": high})})
     with pytest.raises(p3.P3CheckError, match="below their minimum"):
         p3.run(cfg, client=_client(setup, state, always_bad=True))
+
+
+def test_extension_to_25(setup):
+    # Extend only the test table pools (the synthetic table doc is in test) to 25 texts.
+    ext = setup.p3.extension.model_copy(
+        update={"target_n": 25, "splits": ["test"], "scenarios": ["table"]}
+    )
+    cfg = setup.model_copy(update={"p3": setup.p3.model_copy(update={"extension": ext})})
+    state = {"calls": 0}
+    out = p3.run(cfg, client=_client(cfg, state))
+    pool = [json.loads(x) for x in out["pool"].read_text("utf-8").splitlines()]
+    from collections import Counter
+
+    per = Counter((a["doc_id"], a["position"]) for a in pool)
+    assert all(n == 25 for (d, _), n in per.items() if "table" in d)
+    assert all(n == 20 for (d, _), n in per.items() if "table" not in d)
+    assert any(str(a["round"]).startswith("ext") for a in pool if "table" in a["doc_id"])
+    md = out["report"].read_text("utf-8")
+    assert "Test pool extension (flagged deviation)" in md and "Texts added: **15**" in md

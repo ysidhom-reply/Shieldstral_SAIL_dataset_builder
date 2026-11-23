@@ -89,6 +89,16 @@ class ShortPoolCfg(_Strict):
     approved: str  # who approved it and when
 
 
+class P3ExtensionCfg(_Strict):
+    """Extra texts for some pools after the normal rounds (see extend_pools)."""
+
+    target_n: int = 20  # 20 = no extension
+    splits: list[str] = []
+    scenarios: list[str] = []
+    mix: dict[Literal["short", "medium", "long"], int] = {"short": 7, "medium": 9, "long": 9}
+    max_rounds: int = 8
+
+
 class P3Cfg(_Strict):
     prompts: Path
     generator: P3GeneratorCfg
@@ -98,6 +108,7 @@ class P3Cfg(_Strict):
     regen_extra: int = 4  # extra texts asked for in a regeneration round
     top_up_from_spares: bool = True  # after the last round, fill short pools from set-aside texts
     accepted_short_pools: list[ShortPoolCfg] = []
+    extension: P3ExtensionCfg = P3ExtensionCfg()
     judge_batch_size: dict[str, int] = {}  # texts per judge call, per scenario (default 1)
     judge_control: int = 40  # positive control: BIPIA attacks sent to the judge
     judge_control_min_rate: float = 0.8
@@ -119,6 +130,11 @@ class P3Cfg(_Strict):
     prices: dict[str, dict[str, float]]  # model prefix -> {input, output} $ per 1M tokens
 
 
+class P4Cfg(_Strict):
+    # A pool text is "length-matched" if |len(text) - len(attack)| <= window x len(attack).
+    length_window: dict[Literal["text", "code"], float]
+
+
 class Config(_Strict):
     seed: int
     dataset: DatasetCfg
@@ -130,6 +146,7 @@ class Config(_Strict):
     textfooler: TextFoolerCfg
     nemotron: NemotronCfg
     p3: P3Cfg
+    p4: P4Cfg
     expected_counts: dict[str, dict[str, Any]] = {}
 
 

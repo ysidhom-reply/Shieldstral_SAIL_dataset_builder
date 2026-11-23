@@ -143,6 +143,21 @@ def p3_judge_compare(
     typer.echo(f"report: {out['report']}")
 
 
+@app.command("p4-bipia-assemble")
+def p4_bipia_assemble(ctx: typer.Context) -> None:
+    """P4: negatives (label 0) for every P2 positive; writes the bipia config to data/out."""
+    from dataset_builder.steps import p4_bipia_assemble as p4
+
+    opts: RunOptions = ctx.obj
+    if opts.pilot:
+        logging.getLogger(__name__).info("P4 is local and fast (no API): running in full.")
+    out = p4.run(opts.cfg, force=opts.force)
+    for split, path in out["paths"].items():
+        typer.echo(f"{split + ':':<12} {path}")
+    typer.echo(f"pairs:       {out['pairs']} ({out['fallback']} closest-length fallbacks)")
+    typer.echo(f"report:      {out['report']}")
+
+
 @app.command()
 def version() -> None:
     """Print the package version."""
