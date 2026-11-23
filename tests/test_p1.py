@@ -224,7 +224,7 @@ def test_run_stops_on_count_mismatch(p1cfg, monkeypatch):
     with pytest.raises(p1.P1CheckError, match="total: expected 999"):
         p1.run(bad)
     assert not out_docs.exists()
-    assert "FAILED" in (p1cfg.paths.reports / "p1_counts.md").read_text("utf-8")
+    assert "FAILED" in (p1cfg.paths.reports / "p1" / "p1_counts.md").read_text("utf-8")
 
 
 def test_table_without_separator_keeps_header_and_first_row():

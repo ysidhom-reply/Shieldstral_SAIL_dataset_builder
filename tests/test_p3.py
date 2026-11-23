@@ -262,7 +262,7 @@ def test_run_pilot_end_to_end(setup):
     md = out["report"].read_text("utf-8")
     assert "Rejection rate per filter" in md and "Hybrid, per scenario" in md
     assert "Full-run estimate" in md and "FAILED" not in md
-    assert (setup.paths.reports / "p3_pilot_handread.md").is_file()
+    assert (setup.paths.reports / "p3" / "p3_pilot_handread.md").is_file()
     assert out["pool"].name == "benign_pool_pilot.jsonl"
 
     # Rerun: everything from the cache, identical output.
@@ -282,7 +282,7 @@ def test_stops_when_pools_cannot_be_filled(setup):
     with pytest.raises(p3.P3CheckError, match="fewer than 20"):
         p3.run(setup, client=_client(setup, state, always_bad=True), max_rounds=1)
     assert not (setup.paths.interim / "benign_pool_pilot.jsonl").exists()
-    assert "FAILED" in (setup.paths.reports / "p3_pilot_rejections.md").read_text("utf-8")
+    assert "FAILED" in (setup.paths.reports / "p3" / "p3_pilot_rejections.md").read_text("utf-8")
 
 
 def test_parse_verdict():
@@ -300,7 +300,9 @@ def test_mix_and_judge_control(setup):
     for key in {(a["doc_id"], a["position"]) for a in pool}:
         mix = Counter(a["length_bucket"] for a in pool if (a["doc_id"], a["position"]) == key)
         assert sum(mix.values()) == 20 and max(mix.values()) <= 10, key  # cap of 10 per size
-    report = json.loads((setup.paths.reports / "p3_pilot_rejections.json").read_text("utf-8"))
+    report = json.loads(
+        (setup.paths.reports / "p3" / "p3_pilot_rejections.json").read_text("utf-8")
+    )
     ctl = report["judge_control"]
     assert ctl["n"] == 1 and ctl["flagged"] == 0 and not ctl["ok"]  # fake judge only flags "FLAG"
     md = out["report"].read_text("utf-8")

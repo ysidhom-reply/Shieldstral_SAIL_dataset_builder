@@ -17,9 +17,13 @@ def test_write_counts_report(cfg):
     assert counts["scenario"] == {"code": 1, "email": 2}
     assert counts["position"] == {"n/a": 1, "start": 2}
     assert counts["cross"]["counts"]["email | test | 1 | start"] == 1
-    on_disk = json.loads((cfg.paths.reports / "p1_demo_counts.json").read_text(encoding="utf-8"))
+    on_disk = json.loads(
+        (cfg.paths.reports / "p1" / "p1_demo_counts.json").read_text(encoding="utf-8")
+    )
     assert on_disk == counts
-    assert "total rows: **3**" in (cfg.paths.reports / "p1_demo_counts.md").read_text("utf-8")
+    assert "total rows: **3**" in (cfg.paths.reports / "p1" / "p1_demo_counts.md").read_text(
+        "utf-8"
+    )
 
 
 def test_check_expected(cfg):

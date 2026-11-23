@@ -3,7 +3,7 @@
 For every P2 positive, a P3 pool text for the same document and position replaces the attack:
 same document, position, insert_index, query and instruct, so within a pair only the inserted
 text differs. Output: data/out/bipia/{train,validation,test}.parquet (contract columns only)
-and reports/p4_composition.md.
+and reports/p4/p4_composition.md.
 """
 
 import json
@@ -17,7 +17,12 @@ from dataset_builder.benign_filters import AttackIndex, group_of, normalise
 from dataset_builder.config import Config, load_config
 from dataset_builder.insert import InsertionError, insert, remove
 from dataset_builder.io import prepare_out, read_jsonl, read_parquet, write_jsonl, write_parquet
-from dataset_builder.reports import CountMismatchError, check_expected, write_counts_report
+from dataset_builder.reports import (
+    CountMismatchError,
+    check_expected,
+    report_path,
+    write_counts_report,
+)
 from dataset_builder.schema import COLUMNS, Sample
 from dataset_builder.steps.p1_bipia_split import ATTACKS_FILE, DOCS_FILE
 
@@ -382,7 +387,7 @@ def _sections(
 
     # P3 rejection statistics.
     p3 = {}
-    p3_path = cfg.paths.reports / "p3_rejections.json"
+    p3_path = report_path(cfg, "p3_rejections.json")
     if p3_path.is_file():
         p3 = json.loads(p3_path.read_text(encoding="utf-8"))
     p3_rows = []
@@ -490,7 +495,7 @@ def _sections(
             _table(["filter", "name", "texts checked", "rejected", "rate"], p3_rows)
             + f"\n\nP3 top-up: {len(p3.get('topped_up', {}))} pools took set-aside texts over the "
             f"size cap; approved short pools: {len(p3.get('accepted_short_pools', []))}. Details "
-            "in `reports/p3_rejections.md`.",
+            "in `reports/p3/p3_rejections.md`.",
         ),
         (
             "Notes from P3, and what P4 did",
@@ -566,7 +571,7 @@ def run(cfg: Config | None = None, force: bool = False) -> dict[str, Any]:
             "pairs": len(pairs),
         },
     )
-    report = cfg.paths.reports / f"{REPORT_NAME}.md"
+    report = report_path(cfg, f"{REPORT_NAME}.md")
     if failures:
         raise P4CheckError(
             f"P4 stopped, data/out not written. See {report}:\n  " + "\n  ".join(failures)

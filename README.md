@@ -34,7 +34,7 @@ configs/config.yaml   single source of truth (seed, paths, texts, expected count
 data/raw/             downloads (git-ignored)
 data/interim/         intermediate files, e.g. bipia_docs.jsonl (git-ignored)
 data/out/             final configs; never overwritten without --force (git-ignored)
-reports/              <step>_counts.{json,md} for every step
+reports/              one folder per step (p1/ ... p5/) with its .md and .json reports; working_report.{md,pdf,html}
 src/dataset_builder/
   config.py           load_config(), require_secret()
   schema.py           Sample model, COLUMNS, instruct_text(), build_query()
@@ -63,11 +63,11 @@ uv run dataset-builder [--pilot | --full] [--force] [--config PATH] <command>
 
 | Step | Command | Outputs |
 |---|---|---|
-| P1 BIPIA clean and split | `uv run dataset-builder p1-bipia-split` | `data/interim/bipia_docs.jsonl`, `data/interim/attacks.jsonl`, `reports/p1_counts.md` |
-| P2 BIPIA attacked samples (label 1) | `uv run dataset-builder p2-bipia-positives [--n-per-doc 20]` | `data/interim/bipia_positives_{train,validation,test}.parquet`, `reports/p2_counts.md` |
-| P3 BIPIA benign text pool (Mistral) | `uv run dataset-builder p3-benign-pool` (pilot, 20 docs), then `uv run dataset-builder --full p3-benign-pool` | `data/interim/benign_pool.jsonl`, `data/interim/benign_rejected.jsonl`, `reports/p3_rejections.md`, `reports/p3_handread.md` (pilot: `*_pilot*`) |
-| P4 BIPIA negatives + `bipia` config | `uv run dataset-builder p4-bipia-assemble` (`--force` to overwrite) | `data/out/bipia/{train,validation,test}.parquet`, `data/interim/p4_pairs.jsonl`, `reports/p4_composition.md` |
-| P5 Nemotron test set | `uv run dataset-builder --full p5-nemotron` | `data/out/nemotron/test.parquet`, `reports/p5_nemotron.md` |
+| P1 BIPIA clean and split | `uv run dataset-builder p1-bipia-split` | `data/interim/bipia_docs.jsonl`, `data/interim/attacks.jsonl`, `reports/p1/p1_counts.md` |
+| P2 BIPIA attacked samples (label 1) | `uv run dataset-builder p2-bipia-positives [--n-per-doc 20]` | `data/interim/bipia_positives_{train,validation,test}.parquet`, `reports/p2/p2_counts.md` |
+| P3 BIPIA benign text pool (Mistral) | `uv run dataset-builder p3-benign-pool` (pilot, 20 docs), then `uv run dataset-builder --full p3-benign-pool` | `data/interim/benign_pool.jsonl`, `data/interim/benign_rejected.jsonl`, `reports/p3/p3_rejections.md`, `reports/p3/p3_handread.md` (pilot: `*_pilot*`) |
+| P4 BIPIA negatives + `bipia` config | `uv run dataset-builder p4-bipia-assemble` (`--force` to overwrite) | `data/out/bipia/{train,validation,test}.parquet`, `data/interim/p4_pairs.jsonl`, `reports/p4/p4_composition.md` |
+| P5 Nemotron test set | `uv run dataset-builder --full p5-nemotron` | `data/out/nemotron/test.parquet`, `reports/p5/p5_nemotron.md` |
 
 P1 clones BIPIA into `data/raw/BIPIA` and checks it is at the commit pinned in
 `bipia.repo_commit`. Only data files are read; no BIPIA code is run.

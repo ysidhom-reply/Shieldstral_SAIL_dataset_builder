@@ -1,19 +1,19 @@
 {
-  "total": 1200,
+  "total": 1305,
   "scenario": {
     "code": 360,
-    "email": 420,
-    "table": 420
+    "email": 495,
+    "table": 450
   },
   "split": {
-    "test": 600,
+    "test": 705,
     "train": 420,
     "validation": 180
   },
   "position": {
-    "end": 400,
-    "middle": 400,
-    "start": 400
+    "end": 435,
+    "middle": 435,
+    "start": 435
   },
   "cross": {
     "keys": [
@@ -31,18 +31,18 @@
       "code | validation | end": 20,
       "code | validation | middle": 20,
       "code | validation | start": 20,
-      "email | test | end": 100,
-      "email | test | middle": 100,
-      "email | test | start": 100,
+      "email | test | end": 125,
+      "email | test | middle": 125,
+      "email | test | start": 125,
       "email | train | end": 20,
       "email | train | middle": 20,
       "email | train | start": 20,
       "email | validation | end": 20,
       "email | validation | middle": 20,
       "email | validation | start": 20,
-      "table | test | end": 40,
-      "table | test | middle": 40,
-      "table | test | start": 40,
+      "table | test | end": 50,
+      "table | test | middle": 50,
+      "table | test | start": 50,
       "table | train | end": 80,
       "table | train | middle": 80,
       "table | train | start": 80,
@@ -54,26 +54,26 @@
   "mode": "pilot",
   "documents": 20,
   "pools": 60,
-  "generated": 1919,
+  "generated": 2739,
   "reach": {
-    "email|start|1": 168,
-    "email|start|2": 161,
-    "email|start|3": 161,
-    "email|middle|1": 186,
-    "email|middle|2": 184,
-    "email|middle|3": 184,
-    "email|end|1": 209,
-    "email|end|2": 191,
-    "email|end|3": 191,
-    "table|start|1": 170,
-    "table|start|2": 170,
-    "table|start|3": 170,
-    "table|middle|1": 201,
-    "table|middle|2": 201,
-    "table|middle|3": 201,
-    "table|end|1": 161,
-    "table|end|2": 157,
-    "table|end|3": 157,
+    "email|start|1": 340,
+    "email|start|2": 333,
+    "email|start|3": 333,
+    "email|middle|1": 433,
+    "email|middle|2": 431,
+    "email|middle|3": 431,
+    "email|end|1": 451,
+    "email|end|2": 433,
+    "email|end|3": 433,
+    "table|start|1": 192,
+    "table|start|2": 192,
+    "table|start|3": 192,
+    "table|middle|1": 241,
+    "table|middle|2": 241,
+    "table|middle|3": 241,
+    "table|end|1": 229,
+    "table|end|2": 225,
+    "table|end|3": 225,
     "code|start|1": 208,
     "code|start|2": 199,
     "code|start|3": 197,
@@ -83,12 +83,12 @@
     "code|end|1": 265,
     "code|end|2": 258,
     "code|end|3": 258,
-    "email|start|4": 140,
-    "email|middle|4": 140,
-    "email|end|4": 140,
-    "table|start|4": 140,
-    "table|middle|4": 140,
-    "table|end|4": 140,
+    "email|start|4": 169,
+    "email|middle|4": 169,
+    "email|end|4": 171,
+    "table|start|4": 150,
+    "table|middle|4": 150,
+    "table|end|4": 150,
     "code|start|4": 120,
     "code|middle|4": 121,
     "code|end|4": 120
@@ -104,25 +104,31 @@
     "code|end|1": 7,
     "code|middle|4": 1,
     "table|middle|3": 1,
-    "email|end|3": 1
+    "email|end|3": 1,
+    "email|middle|3": 4
   },
   "usage": {
     "mistral-small-2603": {
-      "calls": 157,
-      "cached_calls": 157,
-      "prompt_tokens": 171555,
-      "completion_tokens": 87285
+      "calls": 257,
+      "cached_calls": 257,
+      "prompt_tokens": 247390,
+      "completion_tokens": 99774
     },
     "mistral-medium-2604": {
-      "calls": 433,
+      "calls": 450,
       "cached_calls": 433,
-      "prompt_tokens": 200046,
-      "completion_tokens": 14995
+      "prompt_tokens": 209027,
+      "completion_tokens": 16599
     }
   },
+  "retries": {
+    "429": 0,
+    "5xx": 0,
+    "network": 0
+  },
   "cost_usd": {
-    "mistral-small-2603": 0.07810425,
-    "mistral-medium-2604": 0.4125315
+    "mistral-small-2603": 0.0969729,
+    "mistral-medium-2604": 0.438033
   },
   "judge_control": {
     "n": 40,
@@ -131,11 +137,21 @@
     "missed": [],
     "ok": true
   },
+  "topped_up": {
+    "bipia-email-20c581c84462|middle": 5,
+    "bipia-email-3ef34a0915e7|end": 5,
+    "bipia-email-c6089b159465|start": 5,
+    "bipia-email-c6089b159465|middle": 5,
+    "bipia-email-c6089b159465|end": 3,
+    "bipia-email-ead455994bb3|start": 5,
+    "bipia-email-ead455994bb3|end": 1
+  },
+  "accepted_short_pools": [],
   "surplus_by_size": {
-    "email|short": 53,
-    "email|medium": 62,
+    "email|short": 98,
+    "email|medium": 628,
     "table|short": 40,
-    "table|medium": 67,
+    "table|medium": 167,
     "code|long": 47,
     "code|medium": 213,
     "code|short": 11

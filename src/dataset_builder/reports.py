@@ -1,6 +1,7 @@
-"""Counts reports written to reports/ after every step, and checks against expected counts."""
+"""Counts reports written to reports/<pN>/ after every step, and checks against expected counts."""
 
 import json
+import re
 from collections import Counter
 from collections.abc import Iterable, Mapping
 from pathlib import Path
@@ -73,6 +74,15 @@ def _to_markdown(
     return "\n".join(lines).rstrip() + "\n"
 
 
+def report_path(cfg: Config, filename: str) -> Path:
+    """reports/<pN>/<filename> for a file whose name starts with a step (p1_..., p3_pilot_...),
+    else reports/<filename>. The folder is created if needed."""
+    m = re.match(r"(p\d+)", filename)
+    folder = cfg.paths.reports / m.group(1) if m else cfg.paths.reports
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / filename
+
+
 def write_counts_report(
     step: str,
     rows: Iterable[Mapping[str, Any] | BaseModel],
@@ -83,21 +93,19 @@ def write_counts_report(
     extra: Mapping[str, Any] | None = None,
     name: str | None = None,
 ) -> dict[str, Any]:
-    """Write reports/<name>.{json,md} (default name: <step>_counts) and return the counts.
+    """Write reports/<pN>/<name>.{json,md} (default name: <step>_counts) and return the counts.
 
     `preamble` sections go before the counts, `sections` after. `extra` is merged into the JSON
     (e.g. further count tables a step wants to keep).
     """
     cfg = cfg or load_config()
     counts = compute_counts(rows, keys)
-    out: Path = cfg.paths.reports
-    out.mkdir(parents=True, exist_ok=True)
     payload = counts | dict(extra or {})
     name = name or f"{step}_counts"
-    (out / f"{name}.json").write_text(
+    report_path(cfg, f"{name}.json").write_text(
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
     )
-    (out / f"{name}.md").write_text(
+    report_path(cfg, f"{name}.md").write_text(
         _to_markdown(step, counts, preamble, sections), encoding="utf-8"
     )
     return counts

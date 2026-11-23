@@ -17,7 +17,7 @@ from typing import Any
 from dataset_builder.config import Config, load_config
 from dataset_builder.io import read_jsonl, rng
 from dataset_builder.mistral_client import MistralClient
-from dataset_builder.reports import write_counts_report
+from dataset_builder.reports import report_path, write_counts_report
 from dataset_builder.steps.p1_bipia_split import ATTACKS_FILE, DOCS_FILE
 from dataset_builder.steps.p3_benign_pool import (
     control_items,
@@ -263,7 +263,7 @@ def run(cfg: Config | None = None, batch_size: int = 20, min_agreement: float = 
             ],
         },
     )
-    report = cfg.paths.reports / f"{STEP}.md"
+    report = report_path(cfg, f"{STEP}.md")
     logger.info("%s -> %s", verdict, report)
     return {
         "passed": passed,

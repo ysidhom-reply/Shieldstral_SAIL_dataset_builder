@@ -112,7 +112,7 @@ p3:
         Answer about urllib.request / urlopen(URL): natural additions use urllib or URLs, which
         the brief forbids (rejections: URL 83, import urllib 29, socket/http.client 5).
       approved: team, 2026-11-23
-  # Texts per judge call, per scenario (hybrid). Why: reports/p3_judge_compare.md (pilot, judge
+  # Texts per judge call, per scenario (hybrid). Why: reports/p3/p3_judge_compare.md (pilot, judge
   # prompt judge-v3): with 20 texts per call, email and table agreed 100% with one text per call
   # and all 40 hidden attacks were flagged; code agreed only ~97% (10 harmless code tips flagged
   # as injections: the batch judge gets stricter when it sees code additions together). So code

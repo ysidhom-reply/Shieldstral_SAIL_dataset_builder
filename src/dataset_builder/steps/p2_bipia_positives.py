@@ -1,6 +1,6 @@
 """P2. BIPIA: attacked samples (label 1).
 
-Outputs data/interim/bipia_positives_{train,validation,test}.parquet and reports/p2_counts.md.
+Outputs data/interim/bipia_positives_{train,validation,test}.parquet and reports/p2/p2_counts.md.
 
 - Test: every test document x every test attack of its scenario's group, one position each,
   balanced with a shuffled Latin square.
@@ -21,7 +21,12 @@ from dataset_builder.config import Config, load_config
 from dataset_builder.insert import POSITIONS, InsertionError, insert, remove
 from dataset_builder.io import prepare_out, read_jsonl, rng, write_parquet
 from dataset_builder.query import candidate_questions, query, user_request
-from dataset_builder.reports import CountMismatchError, check_expected, write_counts_report
+from dataset_builder.reports import (
+    CountMismatchError,
+    check_expected,
+    report_path,
+    write_counts_report,
+)
 from dataset_builder.schema import COLUMNS, Sample, instruct_text
 from dataset_builder.steps.p1_bipia_split import ATTACKS_FILE, DOCS_FILE
 
@@ -547,7 +552,7 @@ def run(cfg: Config | None = None, force: bool = False, n_per_doc: int | None = 
             "failures": failures,
         },
     )
-    report = cfg.paths.reports / f"{STEP}_counts.md"
+    report = report_path(cfg, f"{STEP}_counts.md")
     if failures:
         raise P2CheckError(
             f"P2 stopped, outputs not written. See {report}:\n  " + "\n  ".join(failures)

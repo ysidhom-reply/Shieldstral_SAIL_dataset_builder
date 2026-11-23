@@ -164,7 +164,7 @@ Approved short pools (from P3):
 | 3 | duplicate | 102196 | 514 | 0.5% |
 | 4 | judge | 56962 | 16 | 0.0% |
 
-P3 top-up: 189 pools took set-aside texts over the size cap; approved short pools: 2. Details in `reports/p3_rejections.md`.
+P3 top-up: 189 pools took set-aside texts over the size cap; approved short pools: 2. Details in `reports/p3/p3_rejections.md`.
 
 ## Notes from P3, and what P4 did
 

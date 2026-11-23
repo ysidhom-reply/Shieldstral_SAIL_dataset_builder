@@ -1,6 +1,6 @@
 """P1. BIPIA: clean and split.
 
-Outputs data/interim/bipia_docs.jsonl, data/interim/attacks.jsonl and reports/p1_counts.md.
+Outputs data/interim/bipia_docs.jsonl, data/interim/attacks.jsonl and reports/p1/p1_counts.md.
 The split unit is the distinct document: a document and all of its questions go to one split.
 """
 
@@ -28,6 +28,7 @@ from dataset_builder.reports import (
     CountMismatchError,
     check_expected,
     compute_counts,
+    report_path,
     write_counts_report,
 )
 
@@ -731,7 +732,7 @@ def run(cfg: Config | None = None, force: bool = False) -> dict[str, Any]:
             "deviations": deviations,
         },
     )
-    report = cfg.paths.reports / f"{STEP}_counts.md"
+    report = report_path(cfg, f"{STEP}_counts.md")
     if status:
         raise P1CheckError(
             f"P1 stopped, outputs not written. See {report}:\n  " + "\n  ".join(status)

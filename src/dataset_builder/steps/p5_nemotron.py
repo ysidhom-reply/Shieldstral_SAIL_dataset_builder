@@ -5,7 +5,7 @@ One pair per Nemotron record:
   negative (label 0): the same record with the injection (and any leftover wrapper) removed and
                       the cut sentence repaired. Nothing else changes.
 Pairs are capped at `goal_cap` per attacker goal. Output: data/out/nemotron/test.parquet and
-reports/p5_nemotron.md.
+reports/p5/p5_nemotron.md.
 """
 
 import copy
@@ -28,6 +28,7 @@ from dataset_builder.reports import (
     CountMismatchError,
     check_expected,
     compute_counts,
+    report_path,
     write_counts_report,
 )
 from dataset_builder.schema import Sample, build_query, instruct_text
@@ -693,7 +694,7 @@ def _sections(ctx: dict[str, Any]) -> list[tuple[str, str]]:
         )
     )
     sec.append(("Decisions and deviations", "\n".join(f"- {d}" for d in ctx["deviations"])))
-    notes_path = cfg.paths.reports / REVIEW_NOTES
+    notes_path = report_path(cfg, REVIEW_NOTES)
     notes = (
         notes_path.read_text(encoding="utf-8").strip()
         if notes_path.is_file()
@@ -843,7 +844,7 @@ def run(cfg: Config | None = None, force: bool = False, pilot_run: bool = False)
             "review_ids": [p.rec["id"] for p in review],
         },
     )
-    report = cfg.paths.reports / f"{name}.md"
+    report = report_path(cfg, f"{name}.md")
     if status:
         raise P5CheckError(
             f"P5 stopped, outputs not written. See {report}:\n  " + "\n  ".join(status)

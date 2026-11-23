@@ -39,7 +39,12 @@ from dataset_builder.insert import POSITIONS
 from dataset_builder.io import pilot, prepare_out, read_jsonl, rng, write_jsonl
 from dataset_builder.mistral_client import Completion, MistralClient
 from dataset_builder.progress import Progress
-from dataset_builder.reports import CountMismatchError, check_expected, write_counts_report
+from dataset_builder.reports import (
+    CountMismatchError,
+    check_expected,
+    report_path,
+    write_counts_report,
+)
 from dataset_builder.steps.p1_bipia_split import ATTACKS_FILE, DOCS_FILE
 
 logger = logging.getLogger(__name__)
@@ -948,8 +953,8 @@ def run(
             "failures": failures,
         },
     )
-    report = cfg.paths.reports / f"{names['report']}.md"
-    (cfg.paths.reports / names["handread"]).write_text(
+    report = report_path(cfg, f"{names['report']}.md")
+    report_path(cfg, names["handread"]).write_text(
         handread(pools, cfg, p3.handread_per_group), encoding="utf-8"
     )
     rejected_path = prepare_out(cfg.paths.interim / names["rejected"], force=force, cfg=cfg)
@@ -1044,7 +1049,7 @@ DECISIONS: list[tuple[str, str]] = [
         "texts) agreed 100% with one-per-call for email and table and caught every hidden "
         "attack; for code they agreed only 97%, flagging 10 harmless tips. Hence the hybrid: "
         "judge cost ~$34 -> ~$12, time ~4 h -> ~1 h (see *Judge setup* and "
-        "`reports/p3_judge_compare.md`).",
+        "`reports/p3/p3_judge_compare.md`).",
     ),
     (
         "**Pilot: 7 email, 7 table, 6 code documents** (not 20 at random)",
@@ -1502,9 +1507,10 @@ def _sections(
             "verdict independent, a broken reply affects one text, no misaligned answers. It was "
             "the most expensive part of the run (~95% of calls, ~$34 for the full run with the "
             "judge-v3 prompt). Batches of 20 were then tested on the pilot "
-            "(`reports/p3_judge_compare.md`): 40 real attacks were hidden among the benign texts, "
-            "and every verdict was compared with the one-per-call verdict. Structured output (one "
-            "numbered verdict per text) removes the risk of broken or misaligned replies.\n\n"
+            "(`reports/p3/p3_judge_compare.md`): 40 real attacks were hidden among the benign "
+            "texts, and every verdict was compared with the one-per-call verdict. Structured "
+            "output (one numbered verdict per text) removes the risk of broken or misaligned "
+            "replies.\n\n"
             "| scenario | agreement with 1 per call | hidden attacks flagged | decision |\n"
             "|---|---|---|---|\n"
             "| email | 420 / 420 (100%) | 10 / 10 | 20 per call |\n"
