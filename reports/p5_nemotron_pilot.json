@@ -1,0 +1,94 @@
+{
+  "total": 40,
+  "scenario": {
+    "ecommerce": 4,
+    "healthcare": 4,
+    "insurance": 4,
+    "it_helpdesk": 2,
+    "legal": 10,
+    "logistics": 14,
+    "real_estate": 2
+  },
+  "split": {
+    "test": 40
+  },
+  "label": {
+    "0": 20,
+    "1": 20
+  },
+  "cross": {
+    "keys": [
+      "scenario",
+      "split",
+      "label"
+    ],
+    "counts": {
+      "ecommerce | test | 0": 2,
+      "ecommerce | test | 1": 2,
+      "healthcare | test | 0": 2,
+      "healthcare | test | 1": 2,
+      "insurance | test | 0": 2,
+      "insurance | test | 1": 2,
+      "it_helpdesk | test | 0": 1,
+      "it_helpdesk | test | 1": 1,
+      "legal | test | 0": 5,
+      "legal | test | 1": 5,
+      "logistics | test | 0": 7,
+      "logistics | test | 1": 7,
+      "real_estate | test | 0": 1,
+      "real_estate | test | 1": 1
+    }
+  },
+  "stats": {
+    "records": 1272,
+    "before_cap": {
+      "total": 40,
+      "label": {
+        "0": 20,
+        "1": 20
+      }
+    },
+    "total": 40,
+    "label": {
+      "0": 20,
+      "1": 20
+    },
+    "split": {
+      "test": 40
+    },
+    "whitespace_normalised_matches": 0,
+    "multi_occurrence_records": 0,
+    "wrapper_outside_span": 0,
+    "sentence_repaired": 0,
+    "capped_goal_groups": {},
+    "hard_negatives": {
+      "before_cap": 0,
+      "after_cap": 0
+    }
+  },
+  "capped": {},
+  "failures": [],
+  "revision": "d738d4f361cc38bb4d7a42b9066776dade5332f5",
+  "review_ids": [
+    44,
+    113,
+    266,
+    301,
+    360,
+    480,
+    495,
+    499,
+    508,
+    521,
+    558,
+    766,
+    929,
+    952,
+    983,
+    998,
+    1000,
+    1004,
+    1039,
+    1114
+  ]
+}

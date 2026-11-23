@@ -1,0 +1,292 @@
+{
+  "total": 33050,
+  "scenario": {
+    "code": 3500,
+    "email": 3980,
+    "table": 25570
+  },
+  "split": {
+    "test": 21550,
+    "train": 9740,
+    "validation": 1760
+  },
+  "label": {
+    "1": 33050
+  },
+  "position": {
+    "end": 11018,
+    "middle": 11016,
+    "start": 11016
+  },
+  "cross": {
+    "keys": [
+      "scenario",
+      "split",
+      "label",
+      "position"
+    ],
+    "counts": {
+      "code | test | 1 | end": 834,
+      "code | test | 1 | middle": 833,
+      "code | test | 1 | start": 833,
+      "code | train | 1 | end": 266,
+      "code | train | 1 | middle": 267,
+      "code | train | 1 | start": 267,
+      "code | validation | 1 | end": 67,
+      "code | validation | 1 | middle": 67,
+      "code | validation | 1 | start": 66,
+      "email | test | 1 | end": 1100,
+      "email | test | 1 | middle": 1100,
+      "email | test | 1 | start": 1100,
+      "email | train | 1 | end": 173,
+      "email | train | 1 | middle": 173,
+      "email | train | 1 | start": 174,
+      "email | validation | 1 | end": 54,
+      "email | validation | 1 | middle": 53,
+      "email | validation | 1 | start": 53,
+      "table | test | 1 | end": 5250,
+      "table | test | 1 | middle": 5250,
+      "table | test | 1 | start": 5250,
+      "table | train | 1 | end": 2807,
+      "table | train | 1 | middle": 2806,
+      "table | train | 1 | start": 2807,
+      "table | validation | 1 | end": 467,
+      "table | validation | 1 | middle": 467,
+      "table | validation | 1 | start": 466
+    }
+  },
+  "p2_positives": {
+    "total": 33050,
+    "label": {
+      "1": 33050
+    },
+    "by_split": {
+      "train": {
+        "total": 9740,
+        "scenario": {
+          "code": 800,
+          "email": 520,
+          "table": 8420
+        }
+      },
+      "validation": {
+        "total": 1760,
+        "scenario": {
+          "code": 200,
+          "email": 160,
+          "table": 1400
+        }
+      },
+      "test": {
+        "total": 21550,
+        "scenario": {
+          "code": 2500,
+          "email": 3300,
+          "table": 15750
+        }
+      }
+    }
+  },
+  "balance": {
+    "train/code": {
+      "rows": 800,
+      "position": {
+        "end": 266,
+        "middle": 267,
+        "start": 267
+      },
+      "attack_name": {
+        "n": 50,
+        "min": 16,
+        "max": 16
+      },
+      "attack_group": {
+        "n": 10,
+        "min": 80,
+        "max": 80
+      },
+      "attack_x_position": {
+        "min": 1,
+        "max": 11
+      }
+    },
+    "train/email": {
+      "rows": 520,
+      "position": {
+        "end": 173,
+        "middle": 173,
+        "start": 174
+      },
+      "attack_name": {
+        "n": 75,
+        "min": 6,
+        "max": 7
+      },
+      "attack_group": {
+        "n": 15,
+        "min": 34,
+        "max": 35
+      },
+      "attack_x_position": {
+        "min": 1,
+        "max": 7
+      }
+    },
+    "train/table": {
+      "rows": 8420,
+      "position": {
+        "end": 2807,
+        "middle": 2806,
+        "start": 2807
+      },
+      "attack_name": {
+        "n": 75,
+        "min": 112,
+        "max": 113
+      },
+      "attack_group": {
+        "n": 15,
+        "min": 560,
+        "max": 563
+      },
+      "attack_x_position": {
+        "min": 24,
+        "max": 49
+      }
+    },
+    "validation/code": {
+      "rows": 200,
+      "position": {
+        "end": 67,
+        "middle": 67,
+        "start": 66
+      },
+      "attack_name": {
+        "n": 50,
+        "min": 4,
+        "max": 4
+      },
+      "attack_group": {
+        "n": 10,
+        "min": 20,
+        "max": 20
+      },
+      "attack_x_position": {
+        "min": 1,
+        "max": 4
+      }
+    },
+    "validation/email": {
+      "rows": 160,
+      "position": {
+        "end": 54,
+        "middle": 53,
+        "start": 53
+      },
+      "attack_name": {
+        "n": 75,
+        "min": 2,
+        "max": 3
+      },
+      "attack_group": {
+        "n": 15,
+        "min": 10,
+        "max": 12
+      },
+      "attack_x_position": {
+        "min": 1,
+        "max": 2
+      }
+    },
+    "validation/table": {
+      "rows": 1400,
+      "position": {
+        "end": 467,
+        "middle": 467,
+        "start": 466
+      },
+      "attack_name": {
+        "n": 75,
+        "min": 18,
+        "max": 19
+      },
+      "attack_group": {
+        "n": 15,
+        "min": 92,
+        "max": 95
+      },
+      "attack_x_position": {
+        "min": 2,
+        "max": 12
+      }
+    },
+    "test/code": {
+      "rows": 2500,
+      "position": {
+        "end": 834,
+        "middle": 833,
+        "start": 833
+      },
+      "attack_name": {
+        "n": 50,
+        "min": 50,
+        "max": 50
+      },
+      "attack_group": {
+        "n": 10,
+        "min": 250,
+        "max": 250
+      },
+      "attack_x_position": {
+        "min": 16,
+        "max": 17
+      }
+    },
+    "test/email": {
+      "rows": 3300,
+      "position": {
+        "end": 1100,
+        "middle": 1100,
+        "start": 1100
+      },
+      "attack_name": {
+        "n": 75,
+        "min": 44,
+        "max": 44
+      },
+      "attack_group": {
+        "n": 15,
+        "min": 220,
+        "max": 220
+      },
+      "attack_x_position": {
+        "min": 14,
+        "max": 15
+      }
+    },
+    "test/table": {
+      "rows": 15750,
+      "position": {
+        "end": 5250,
+        "middle": 5250,
+        "start": 5250
+      },
+      "attack_name": {
+        "n": 75,
+        "min": 210,
+        "max": 210
+      },
+      "attack_group": {
+        "n": 15,
+        "min": 1050,
+        "max": 1050
+      },
+      "attack_x_position": {
+        "min": 70,
+        "max": 70
+      }
+    }
+  },
+  "n_per_doc": 20,
+  "failures": []
+}

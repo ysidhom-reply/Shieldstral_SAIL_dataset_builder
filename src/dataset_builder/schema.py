@@ -1,10 +1,125 @@
-"""Record schema for the dataset. Adapt the fields to your use case."""
+"""Shared sample schema: the same columns, in the same order, for every dataset config."""
 
-from pydantic import BaseModel, Field
+from typing import Literal, Self
+
+from pydantic import BaseModel, ConfigDict, model_validator
+
+from dataset_builder.config import Config, load_config
+
+Source = Literal["bipia", "nemotron", "bipia_textfooler"]
+Split = Literal["train", "validation", "test"]
+BipiaScenario = Literal["email", "table", "code"]
+LabelProvenance = Literal["construction", "injection_metadata", "validated"]
+GenerationMethod = Literal[
+    "sampled_insertion", "llm_benign_insertion", "original", "counterfactual", "textfooler"
+]
+Position = Literal["start", "middle", "end"]
+
+BIPIA_SCENARIOS: frozenset[str] = frozenset(BipiaScenario.__args__)
+
+# Fields allowed only for some sources (BIPIA fields carry over to TextFooler rows).
+BIPIA_FIELDS = (
+    "attack_group",
+    "attack_name",
+    "position",
+    "insert_index",
+    "benign_id",
+    "shieldstral_checked",
+)
+NEMOTRON_FIELDS = (
+    "document_path",
+    "injection_vector",
+    "attack_category",
+    "goal_group",
+    "wrapper",
+    "wrapper_outside_span",
+    "sentence_repaired",
+)
+TEXTFOOLER_FIELDS = ("victim_model",)
+
+# Allowed generation methods per (source, label).
+_METHODS: dict[tuple[str, int], set[str]] = {
+    ("bipia", 1): {"sampled_insertion"},
+    ("bipia", 0): {"llm_benign_insertion"},
+    ("nemotron", 1): {"original"},
+    ("nemotron", 0): {"counterfactual"},
+    ("bipia_textfooler", 1): {"textfooler"},
+    ("bipia_textfooler", 0): {"textfooler"},
+}
 
 
-class Record(BaseModel):
-    id: str
-    text: str = Field(min_length=1)
-    label: str | None = None
-    metadata: dict[str, str] = Field(default_factory=dict)
+def instruct_text(cfg: Config | None = None) -> str:
+    """The fixed policy text, identical for every sample."""
+    return (cfg or load_config()).texts.instruct
+
+
+def build_query(user_request: str, cfg: Config | None = None) -> str:
+    """Fill the fixed query template with the user's request."""
+    return (cfg or load_config()).texts.query_template.format(user_request=user_request)
+
+
+class Sample(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    sample_id: str
+    parent_id: str | None = None
+    source: Source
+    split: Split
+    source_split: str
+    scenario: str
+    instruct: str
+    query: str
+    document: str
+    label: Literal[0, 1]
+    answer: Literal["yes", "no"]
+    label_provenance: LabelProvenance
+    generation_method: GenerationMethod
+    attack_group: str | None = None
+    attack_name: str | None = None
+    position: Position | None = None
+    insert_index: int | None = None
+    injection_span: str | None = None
+    protected_tokens: list[str] | None = None
+    benign_id: str | None = None
+    shieldstral_checked: bool | None = None
+    document_path: str | None = None
+    injection_vector: str | None = None
+    attack_category: str | None = None
+    goal_group: str | None = None
+    wrapper: str | None = None
+    wrapper_outside_span: bool | None = None
+    sentence_repaired: bool | None = None
+    victim_model: str | None = None
+
+    @model_validator(mode="after")
+    def _check(self) -> Self:
+        errors: list[str] = []
+        if self.answer != ("yes" if self.label == 1 else "no"):
+            errors.append(f"answer {self.answer!r} does not match label {self.label}")
+        if self.instruct != instruct_text():
+            errors.append("instruct differs from the fixed policy text")
+        if self.source != "nemotron" and self.scenario not in BIPIA_SCENARIOS:
+            errors.append(f"scenario {self.scenario!r} is not a BIPIA scenario")
+        if self.generation_method not in _METHODS[(self.source, self.label)]:
+            errors.append(
+                f"generation_method {self.generation_method!r} invalid for "
+                f"source={self.source}, label={self.label}"
+            )
+        allowed = {
+            "bipia": BIPIA_FIELDS,
+            "nemotron": NEMOTRON_FIELDS,
+            "bipia_textfooler": BIPIA_FIELDS + TEXTFOOLER_FIELDS,
+        }[self.source]
+        for f in BIPIA_FIELDS + NEMOTRON_FIELDS + TEXTFOOLER_FIELDS:
+            if f not in allowed and getattr(self, f) is not None:
+                errors.append(f"{f} must be None for source={self.source}")
+        if self.source == "bipia" and self.label == 1:
+            for f in ("benign_id", "shieldstral_checked"):
+                if getattr(self, f) is not None:
+                    errors.append(f"{f} is only set on BIPIA negatives")
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
+
+
+COLUMNS: tuple[str, ...] = tuple(Sample.model_fields)

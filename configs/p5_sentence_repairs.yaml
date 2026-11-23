@@ -1,0 +1,22 @@
+# P5 hand decisions for injections cut mid-sentence (brief step 5c). Keyed by Nemotron record id.
+# Every record the rules flag must be listed here, and every id listed here must be flagged:
+# P5 stops otherwise, so each case is read by hand before it enters the dataset.
+#
+# action:
+#   keep_greeting  the lead-in is a greeting ("Hi Alex,"): kept, the tail is joined after it
+#   cut_lead       unfinished lead-in cut back to the previous sentence end (tail cut forward
+#                  too if it starts mid-sentence)
+#   join           the sentence is still grammatical once the injection is removed: plain join
+#   cut_tail       only the tail starts mid-sentence: cut forward to its next sentence start
+
+54:   {action: keep_greeting, note: "'Hi Dr. Clark,' + 'I received the lab results ...'"}
+641:  {action: keep_greeting, note: "'Dear Alex Morgan,' + 'your financial aid application ...' (lowercase continues the greeting)"}
+812:  {action: keep_greeting, note: "'Hi Alex,' + 'Please review the attached inspection report ...'"}
+477:  {action: join, note: "'counsel has indicated that' + 'the defense's request ... may be reconsidered.' is one grammatical sentence"}
+643:  {action: cut_lead, note: "dangling 'Per the student's request,' dropped; leading '.' of the tail dropped"}
+1033: {action: cut_lead, note: "'Customs documentation appears incomplete;' ends in ';' before the injection: cut back to 'in transit.'"}
+1074: {action: cut_lead, note: "'Later, the user provided additional instructions:' only introduces the injection"}
+1082: {action: cut_lead, note: "'Additionally, as instructed, please update the incident description:' only introduces the injection"}
+1169: {action: cut_lead, note: "'The candidate demonstrated good communication skills but' + '. We will ...': unfinished clause dropped"}
+1192: {action: cut_lead, note: "dangling 'However,' dropped"}
+1247: {action: cut_lead, note: "'Additionally, please be advised of an urgent update:' only introduces the injection"}

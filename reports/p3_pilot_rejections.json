@@ -1,0 +1,171 @@
+{
+  "total": 1200,
+  "scenario": {
+    "code": 360,
+    "email": 420,
+    "table": 420
+  },
+  "split": {
+    "test": 600,
+    "train": 420,
+    "validation": 180
+  },
+  "position": {
+    "end": 400,
+    "middle": 400,
+    "start": 400
+  },
+  "cross": {
+    "keys": [
+      "scenario",
+      "split",
+      "position"
+    ],
+    "counts": {
+      "code | test | end": 60,
+      "code | test | middle": 60,
+      "code | test | start": 60,
+      "code | train | end": 40,
+      "code | train | middle": 40,
+      "code | train | start": 40,
+      "code | validation | end": 20,
+      "code | validation | middle": 20,
+      "code | validation | start": 20,
+      "email | test | end": 100,
+      "email | test | middle": 100,
+      "email | test | start": 100,
+      "email | train | end": 20,
+      "email | train | middle": 20,
+      "email | train | start": 20,
+      "email | validation | end": 20,
+      "email | validation | middle": 20,
+      "email | validation | start": 20,
+      "table | test | end": 40,
+      "table | test | middle": 40,
+      "table | test | start": 40,
+      "table | train | end": 80,
+      "table | train | middle": 80,
+      "table | train | start": 80,
+      "table | validation | end": 20,
+      "table | validation | middle": 20,
+      "table | validation | start": 20
+    }
+  },
+  "mode": "pilot",
+  "documents": 20,
+  "pools": 60,
+  "generated": 1919,
+  "reach": {
+    "email|start|1": 168,
+    "email|start|2": 161,
+    "email|start|3": 161,
+    "email|middle|1": 186,
+    "email|middle|2": 184,
+    "email|middle|3": 184,
+    "email|end|1": 209,
+    "email|end|2": 191,
+    "email|end|3": 191,
+    "table|start|1": 170,
+    "table|start|2": 170,
+    "table|start|3": 170,
+    "table|middle|1": 201,
+    "table|middle|2": 201,
+    "table|middle|3": 201,
+    "table|end|1": 161,
+    "table|end|2": 157,
+    "table|end|3": 157,
+    "code|start|1": 208,
+    "code|start|2": 199,
+    "code|start|3": 197,
+    "code|middle|1": 178,
+    "code|middle|2": 178,
+    "code|middle|3": 177,
+    "code|end|1": 265,
+    "code|end|2": 258,
+    "code|end|3": 258,
+    "email|start|4": 140,
+    "email|middle|4": 140,
+    "email|end|4": 140,
+    "table|start|4": 140,
+    "table|middle|4": 140,
+    "table|end|4": 140,
+    "code|start|4": 120,
+    "code|middle|4": 121,
+    "code|end|4": 120
+  },
+  "rejected": {
+    "email|end|1": 18,
+    "email|start|1": 7,
+    "email|middle|1": 2,
+    "table|end|1": 4,
+    "code|start|1": 9,
+    "code|start|2": 2,
+    "code|middle|2": 1,
+    "code|end|1": 7,
+    "code|middle|4": 1,
+    "table|middle|3": 1,
+    "email|end|3": 1
+  },
+  "usage": {
+    "mistral-small-2603": {
+      "calls": 157,
+      "cached_calls": 157,
+      "prompt_tokens": 171555,
+      "completion_tokens": 87285
+    },
+    "mistral-medium-2604": {
+      "calls": 433,
+      "cached_calls": 433,
+      "prompt_tokens": 200046,
+      "completion_tokens": 14995
+    }
+  },
+  "cost_usd": {
+    "mistral-small-2603": 0.07810425,
+    "mistral-medium-2604": 0.4125315
+  },
+  "judge_control": {
+    "n": 40,
+    "flagged": 40,
+    "rate": 1.0,
+    "missed": [],
+    "ok": true
+  },
+  "surplus_by_size": {
+    "email|short": 53,
+    "email|medium": 62,
+    "table|short": 40,
+    "table|medium": 67,
+    "code|long": 47,
+    "code|medium": 213,
+    "code|short": 11
+  },
+  "generator": {
+    "requested": "mistral-small-2603",
+    "id": "mistral-small-2603",
+    "aliases": [
+      "mistral-small-2603",
+      "mistral-small-latest",
+      "mistral-vibe-cli-fast",
+      "magistral-small-latest"
+    ],
+    "deprecation": null
+  },
+  "judge": {
+    "requested": "mistral-medium-2604",
+    "id": "mistral-medium-2604",
+    "aliases": [
+      "mistral-medium-2604",
+      "mistral-medium-latest",
+      "mistral-medium",
+      "mistral-medium-3-5",
+      "mistral-medium-3.5",
+      "mistral-medium-3",
+      "mistral-vibe-cli-latest",
+      "mistral-vibe-cli-with-tools",
+      "magistral-medium-latest"
+    ],
+    "deprecation": null
+  },
+  "failures": []
+}

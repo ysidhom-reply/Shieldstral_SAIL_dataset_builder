@@ -1,0 +1,268 @@
+{
+  "total": 879,
+  "scenario": {
+    "code": 100,
+    "email": 78,
+    "table": 701
+  },
+  "split": {
+    "test": 304,
+    "train": 487,
+    "validation": 88
+  },
+  "source_split": {
+    "test": 178,
+    "train": 701
+  },
+  "cross": {
+    "keys": [
+      "scenario",
+      "split",
+      "source_split"
+    ],
+    "counts": {
+      "code | test | test": 50,
+      "code | train | train": 40,
+      "code | validation | train": 10,
+      "email | test | test": 44,
+      "email | train | train": 26,
+      "email | validation | train": 8,
+      "table | test | test": 84,
+      "table | test | train": 126,
+      "table | train | train": 421,
+      "table | validation | train": 70
+    }
+  },
+  "repo_commit": "a004b69ec0dd446e0afd461d98cb5e96e120a5d0",
+  "p1_docs": {
+    "total": 879,
+    "scenario": {
+      "code": 100,
+      "email": 78,
+      "table": 701
+    },
+    "split": {
+      "test": 304,
+      "train": 487,
+      "validation": 88
+    },
+    "source_split": {
+      "test": 178,
+      "train": 701
+    },
+    "by_scenario": {
+      "code": {
+        "split": {
+          "test": 50,
+          "train": 40,
+          "validation": 10
+        }
+      },
+      "email": {
+        "split": {
+          "test": 44,
+          "train": 26,
+          "validation": 8
+        }
+      },
+      "table": {
+        "split": {
+          "test": 210,
+          "train": 421,
+          "validation": 70
+        }
+      }
+    },
+    "cross_split_emails_dropped": 11,
+    "train_questions_disregarded": 11,
+    "tables_moved_to_test": 126
+  },
+  "p1_attacks": {
+    "total": 250,
+    "by_group": {
+      "code": {
+        "source_split": {
+          "train": 50,
+          "test": 50
+        },
+        "attack_groups": {
+          "train": 10,
+          "test": 10
+        }
+      },
+      "text": {
+        "source_split": {
+          "train": 75,
+          "test": 75
+        },
+        "attack_groups": {
+          "train": 15,
+          "test": 15
+        }
+      }
+    }
+  },
+  "test_composition": [
+    {
+      "scenario": "email",
+      "official_test_docs": 44,
+      "official_test_rows": 50,
+      "rows_kept": 50,
+      "moved_from_train": 0,
+      "test_docs": 44,
+      "ok": true
+    },
+    {
+      "scenario": "table",
+      "official_test_docs": 84,
+      "official_test_rows": 100,
+      "rows_kept": 100,
+      "moved_from_train": 126,
+      "test_docs": 210,
+      "ok": true
+    },
+    {
+      "scenario": "code",
+      "official_test_docs": 50,
+      "official_test_rows": 50,
+      "rows_kept": 50,
+      "moved_from_train": 0,
+      "test_docs": 50,
+      "ok": true
+    }
+  ],
+  "moved_tables": [
+    "bipia-table-03c332c0707c",
+    "bipia-table-055e4c49a53b",
+    "bipia-table-06a9c1f88269",
+    "bipia-table-06d6442a62d9",
+    "bipia-table-0751eb58fac6",
+    "bipia-table-098244a984e3",
+    "bipia-table-0bca750086c9",
+    "bipia-table-0c56ef8d6d8a",
+    "bipia-table-0ec8615c069a",
+    "bipia-table-10811dc56132",
+    "bipia-table-10cc4089e7fb",
+    "bipia-table-11686ad46cb4",
+    "bipia-table-18aad81062bd",
+    "bipia-table-19acf76ab8e1",
+    "bipia-table-1a7bce417991",
+    "bipia-table-1b17281e4bc4",
+    "bipia-table-1db3049cb996",
+    "bipia-table-1ddf6182edb9",
+    "bipia-table-1e8040d39465",
+    "bipia-table-1f21d3ae848e",
+    "bipia-table-21a1844981fe",
+    "bipia-table-23d18ffc2722",
+    "bipia-table-25c619f3cfaf",
+    "bipia-table-25f5d34ee212",
+    "bipia-table-29a7996c091a",
+    "bipia-table-2bcd73150e9f",
+    "bipia-table-2d31e5c6811a",
+    "bipia-table-2dfe5915ec3b",
+    "bipia-table-2e350c0dae64",
+    "bipia-table-2e4d44b7773b",
+    "bipia-table-2f6f96d12fa5",
+    "bipia-table-307af924f153",
+    "bipia-table-31ad16fee968",
+    "bipia-table-32cfed3854dd",
+    "bipia-table-3314581e9664",
+    "bipia-table-3346b2e3d2d4",
+    "bipia-table-35fe75305d2c",
+    "bipia-table-39bd92ae8daf",
+    "bipia-table-39db3173c74a",
+    "bipia-table-3a4cad077f75",
+    "bipia-table-3a605e6e8566",
+    "bipia-table-3d1ba02a2bec",
+    "bipia-table-45b5f6df763b",
+    "bipia-table-474fac7dd1b4",
+    "bipia-table-4b5073debf29",
+    "bipia-table-4d0b29a28f9f",
+    "bipia-table-4fcac1fc8a8b",
+    "bipia-table-513928c316db",
+    "bipia-table-53b181726e52",
+    "bipia-table-563a8c7e8e0e",
+    "bipia-table-57322b702960",
+    "bipia-table-584d6f416889",
+    "bipia-table-5956a81117e0",
+    "bipia-table-5a79fc6416fa",
+    "bipia-table-61116065c557",
+    "bipia-table-6a90eb226f9f",
+    "bipia-table-70af95d1918c",
+    "bipia-table-712344a9088e",
+    "bipia-table-71f3e0ef043d",
+    "bipia-table-75076f9afebb",
+    "bipia-table-793832f1becb",
+    "bipia-table-79aa8ecf4cf7",
+    "bipia-table-7a045836b284",
+    "bipia-table-841d475bf1ef",
+    "bipia-table-86c93906b07c",
+    "bipia-table-873000a9edd2",
+    "bipia-table-8811eabe65ec",
+    "bipia-table-8ea84994814f",
+    "bipia-table-911701c89691",
+    "bipia-table-92f0abd7d120",
+    "bipia-table-9902bbf75566",
+    "bipia-table-9f98be2d3e93",
+    "bipia-table-a157534273b1",
+    "bipia-table-a7cc13fd9a52",
+    "bipia-table-a8157d94d2e0",
+    "bipia-table-a81d78851b59",
+    "bipia-table-aa858b1ff88a",
+    "bipia-table-af73e8954009",
+    "bipia-table-b38b29c74151",
+    "bipia-table-b49487797ae6",
+    "bipia-table-b6633d096b0f",
+    "bipia-table-b71fc1b3a80b",
+    "bipia-table-b78919878bb0",
+    "bipia-table-b8b07559aa90",
+    "bipia-table-b8f3297b2432",
+    "bipia-table-b9da2d72513f",
+    "bipia-table-ba8b5aaf1aa4",
+    "bipia-table-bb47a43bd3e0",
+    "bipia-table-bda4723810da",
+    "bipia-table-bdaa76687c5b",
+    "bipia-table-c00f5dbe3ae0",
+    "bipia-table-c0172ad00954",
+    "bipia-table-c1fc8eb90595",
+    "bipia-table-c44329d6459c",
+    "bipia-table-c7aeb65891ff",
+    "bipia-table-c95964634486",
+    "bipia-table-c9af736e49bc",
+    "bipia-table-ca8bf989751c",
+    "bipia-table-cb588d86cd7b",
+    "bipia-table-cc25de5a4b78",
+    "bipia-table-ccac1e91c12e",
+    "bipia-table-ce439c5c70c3",
+    "bipia-table-cf5a081f4de0",
+    "bipia-table-cff80b12ef83",
+    "bipia-table-d347dd6be39f",
+    "bipia-table-d37043ace67f",
+    "bipia-table-d517610df6c2",
+    "bipia-table-d57f4401e474",
+    "bipia-table-d5b22b537093",
+    "bipia-table-d7320f6e51d2",
+    "bipia-table-db4f111944bf",
+    "bipia-table-dec867e59a7d",
+    "bipia-table-deea75822808",
+    "bipia-table-e0902e0995d0",
+    "bipia-table-e31528526955",
+    "bipia-table-e65feb85f647",
+    "bipia-table-e7c5c1a5225a",
+    "bipia-table-eb019540d5fa",
+    "bipia-table-f01917d9b6ef",
+    "bipia-table-f2cc779d0264",
+    "bipia-table-f548317691b5",
+    "bipia-table-f84e46ff8c71",
+    "bipia-table-f93760b90a50",
+    "bipia-table-fbcf2345a0bc",
+    "bipia-table-fe5b1a66b56d",
+    "bipia-table-fe96fab8fd65"
+  ],
+  "failures": [],
+  "deviations": [
+    "text: category name 'Language Translation' is in both train and test. Its strings differ (0 shared), so it is kept (allowed_shared_attack_groups). See *Note for the team: shared attack-type name* for the impact and the evaluation follow-up.",
+    "Email questions keep BIPIA's 'Q: ' prefix. They are stored as is; the step that builds the query decides whether to strip it.",
+    "The code scenario has no `question` field: the user's request is `code` + `error`."
+  ]
+}

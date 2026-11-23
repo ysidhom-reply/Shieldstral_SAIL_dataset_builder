@@ -38,7 +38,7 @@ coverage.xml
 # --- Data (keep folder structure, ignore contents) ---
 data/raw/*
 data/interim/*
-data/processed/*
+data/out/*
 !data/**/.gitkeep
 
 # --- Large / binary dataset formats ---
