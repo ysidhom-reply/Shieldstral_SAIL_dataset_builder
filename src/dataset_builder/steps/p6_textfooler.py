@@ -273,7 +273,19 @@ class TextFoolerEngine:
             ) from e
 
         tf = cfg.textfooler
-        self.revision = tf.victim_revision or HfApi().model_info(tf.victim_model, token=False).sha
+        self.victim_license = None
+        try:  # the licence comes from the victim's model card (recorded for the dataset card)
+            mi = HfApi().model_info(tf.victim_model, revision=tf.victim_revision, token=False)
+            card = getattr(mi, "card_data", None)
+            self.victim_license = getattr(card, "license", None) or next(
+                (t.removeprefix("license:") for t in (mi.tags or []) if t.startswith("license:")),
+                None,
+            )
+            pinned = mi.sha
+        except Exception as e:  # offline with a pinned revision: the licence stays unknown
+            logger.warning("could not read the victim's model card: %s", e)
+            pinned = None
+        self.revision = tf.victim_revision or pinned
         if not tf.victim_revision:
             logger.warning(
                 "victim revision not pinned: using %s (pin it in the config)", self.revision
@@ -388,6 +400,7 @@ class TextFoolerEngine:
                 versions[pkg] = "n/a"
         return {
             "victim": self.victim_id,
+            "victim_license": self.victim_license,
             "versions": versions,
             "constraints": self.constraints_used,
             "windows_scored": self.scorer.windows_scored,
@@ -988,7 +1001,7 @@ def run(
             cfg.paths.out / "bipia_textfooler" / "test.parquet", force=force, cfg=cfg
         )
         write_parquet(out_path, samples)
-        report_rows, keys = samples, ("scenario", "label", "position")
+        report_rows, keys = samples, ("scenario", "split", "label", "position")
     extra["checks"] = checks
     payload |= {"cost_usd": cost, "wall_seconds": extra["wall_seconds"]}
     report_name = "p6_textfooler_pilot" if is_pilot else "p6_textfooler"

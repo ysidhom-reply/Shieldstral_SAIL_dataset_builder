@@ -81,7 +81,7 @@ tr:last-child td { border-bottom: 0; }
 <body>
 <div class="wrap">
 <header><div style="color:var(--muted);font:600 11.5px/1 var(--font-body);letter-spacing:.12em;text-transform:uppercase;margin-bottom:10px">Dataset build report</div><h1>ipi-twins: working report</h1></header>
-<section class="sec"><p><strong>Status:</strong> 2026-11-24 · <strong>Scope:</strong> P0–P5, P7 v0, P10 v0.1 (P6 built, pilot paused) · <strong>Detailed reports:</strong> <code>reports/p1/</code> … <code>reports/p7/</code>, superseded ones in <code>reports/archive/</code> (links at the end)</p>
+<section class="sec"><p><strong>Status:</strong> 2026-11-24 · <strong>Scope:</strong> P0–P5, P7 v0, P10 (v0 ready to push; v1 waits for P6 and P7 v1) · <strong>Detailed reports:</strong> <code>reports/p1/</code> … <code>reports/p7/</code>, superseded ones in <code>reports/archive/</code> (links at the end)</p>
 </section>
 <section class="sec"><h2>Summary</h2>
 <ul>
@@ -97,7 +97,7 @@ tr:last-child td { border-bottom: 0; }
 <li><strong>option B:</strong> 40% of every pool was replaced by <em>hard negatives</em>, harmless texts that sound like instructions to the human reader;</li>
 <li><strong>option (a):</strong> P4 now prefers pool texts without the over-used benign words.</li>
 <li><strong>Test is larger than train by design:</strong> every test document meets every test attack (a benchmark), while train samples 20 attacks per document. Train still has more documents (487 vs 304).</li>
-<li><strong>Hugging Face:</strong> v0.1 (pushed 2026-11-23) no longer matches <code>data/out</code>. The next push is a new version.</li>
+<li><strong>Hugging Face:</strong> the early <code>v0.1</code> (pushed 2026-11-23) no longer matches <code>data/out</code>. <code>v0</code> is ready to push (dry-run passes, P7 gate open); <code>v1</code> adds <code>bipia_textfooler</code> after P6 and P7 v1.</li>
 <li><strong>API cost:</strong> about $23.5 for P3 as tracked ($15.5 original pool, $7.1 hard negatives, about $0.9 hard-negative pilots), plus roughly $4 for earlier pilots and tests.</li>
 </ul>
 </section>
@@ -182,9 +182,9 @@ P7 checks + baselines --&gt; PUSH ALLOWED / BLOCKED --&gt; P10 push
 </tr>
 <tr>
 <td><strong>P10</strong> Push</td>
-<td>🟡 v0.1 pushed, now outdated</td>
-<td><code>SAIL-Reply/ipi-twins</code>, tag <code>v0.1</code></td>
-<td>Early, partial push; repo name <code>ipi-twins</code>; the next push is a new version</td>
+<td>🟡 versioned (v0, v1); v0 dry-run passes, not pushed</td>
+<td><code>SAIL-Reply/ipi-twins</code>, tags <code>v0</code>, <code>v1</code></td>
+<td>P7 gate enforced; v1 only adds <code>bipia_textfooler</code>; repo name <code>ipi-twins</code></td>
 </tr>
 </tbody>
 </table>
@@ -516,17 +516,20 @@ P7 checks + baselines --&gt; PUSH ALLOWED / BLOCKED --&gt; P10 push
 <li>TF-IDF scores 0.905 with only hard-negative negatives and 0.923 with only the original ones;</li>
 <li>without "Language Translation", TF-IDF is 0.914 overall.</li>
 </ul>
-<h3>P10: push to Hugging Face (v0.1, record in <code>archive/p10/v0.1/</code>)</h3>
+<h3>P10: push to Hugging Face (versions v0 and v1)</h3>
 <ul>
-<li><strong>Early, partial push (team decision):</strong> <code>v0.1</code> has <code>bipia</code> and <code>nemotron</code> (29 columns, original pool) so that a first training could start.</li>
-<li><strong>Repository:</strong> <code>SAIL-Reply/ipi-twins</code>, private. <strong>Licence</strong> <code>cc-by-sa-4.0</code>, with credit to BIPIA (MIT), NVIDIA (CC BY 4.0), Mistral Small (Apache 2.0) and TextAttack (MIT).</li>
-<li><strong>Model-free card;</strong> generated from the reports (no hand-typed numbers). Verified with <code>load_dataset</code> in a clean environment.</li>
-<li><strong>v0.1 is now outdated:</strong> <code>data/out</code> has <code>benign_span</code> and the new negatives. The next push needs P7 to say PUSH ALLOWED (it does for v0) and gets a new tag.</li>
+<li><strong>Versions (the brief's scheme):</strong> <code>v0</code> = <code>bipia</code> + <code>nemotron</code>; <code>v1</code> = v0 + <code>bipia_textfooler</code> (test). A version is pushed once and tagged with its name, so a training can pin it.</li>
+<li><strong>v1 only adds:</strong> <code>bipia_textfooler/test.parquet</code> and an updated card. No v0 file is uploaded again, and <code>p10-verify --version v1</code> loads every config at <code>v1</code>, loads <code>v0</code> again, and compares the v0 files byte for byte (sha256) between the two tags.</li>
+<li><strong>The P7 gate is now in the code:</strong> <code>p10-push --push</code> stops unless <code>reports/p7/p7_checks_&lt;version&gt;.json</code> says PUSH ALLOWED and is newer than the data it checked. A dry-run always runs and shows the gate. P7 v0 says PUSH ALLOWED; P7 v1 does not exist yet, so v1 stays blocked until P6 is finished and P7 v1 is built.</li>
+<li><strong>The card</strong> keeps the v0 text and, from v1, adds the TextFooler section: ProtectAI as the victim (revision and licence read from its model card by P6), the constraint values, the window rule, the attempted / skipped / fooled / failed / kept counts, and the note that only variants that fooled the victim are kept. TextAttack (MIT) is in the licences. The card also has the hard-negatives section (what, why, filters, judge-v4, prompts, share per split) and the P7 baselines.</li>
+<li><strong>Safety:</strong> a dry-run never calls the Hub; <code>--push</code> refuses a public repo, an existing tag, and a v1 without a <code>v0</code> tag; the staged files are scanned for token patterns and the actual token value.</li>
+<li><strong>Repository:</strong> <code>SAIL-Reply/ipi-twins</code>, private, licence <code>cc-by-sa-4.0</code>. The early <code>v0.1</code> push (29 columns, original pool, before this scheme) is recorded in <code>archive/p10/v0.1/</code>; <code>v0</code> replaces it in <code>main</code> and the <code>v0.1</code> tag keeps it reachable.</li>
+<li><strong>Status:</strong> v0 dry-run passes (the card is in <code>reports/p10/p10_dataset_card_v0.md</code>); not pushed. The user runs the push after confirming that the data is final.</li>
 </ul>
 </section>
 <section class="sec"><h2>Open points for the team</h2>
 <ol>
-<li><strong>Next push:</strong> push the current v0 as a new version (e.g. <code>v0.2</code>) so that trainings use the hard negatives?</li>
+<li><strong>Push v0:</strong> the card is ready for review (<code>reports/p10/p10_dataset_card_v0.md</code>); the user confirms the data is final and runs the push.</li>
 <li><strong>P6:</strong> run a new pilot on the current negatives, then decide on the full run from its projected CPU time.</li>
 <li><strong>Train tables and hard negatives:</strong> with option (a), train tables have 10% hard negatives (test 40%). Revisit if a trained detector shows weak results on instruction-like benign tables.</li>
 <li><strong>Evaluation:</strong> report test metrics per <code>attack_group</code>, and with and without "Language Translation".</li>

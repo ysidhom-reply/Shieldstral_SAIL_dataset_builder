@@ -1,6 +1,6 @@
 # ipi-twins: working report
 
-**Status:** 2026-11-24 · **Scope:** P0–P5, P7 v0, P10 v0.1 (P6 built, pilot paused) · **Detailed reports:** `reports/p1/` … `reports/p7/`, superseded ones in `reports/archive/` (links at the end)
+**Status:** 2026-11-24 · **Scope:** P0–P5, P7 v0, P10 (v0 ready to push; v1 waits for P6 and P7 v1) · **Detailed reports:** `reports/p1/` … `reports/p7/`, superseded ones in `reports/archive/` (links at the end)
 
 ## Summary
 - **Goal:** a private Hugging Face dataset, [`SAIL-Reply/ipi-twins`](https://huggingface.co/datasets/SAIL-Reply/ipi-twins) (planned as `ipi-shieldstral`), to train and benchmark Shieldstral as a guard against indirect prompt injection. It has three configs:
@@ -15,7 +15,7 @@
   - **option B:** 40% of every pool was replaced by *hard negatives*, harmless texts that sound like instructions to the human reader;
   - **option (a):** P4 now prefers pool texts without the over-used benign words.
 - **Test is larger than train by design:** every test document meets every test attack (a benchmark), while train samples 20 attacks per document. Train still has more documents (487 vs 304).
-- **Hugging Face:** v0.1 (pushed 2026-11-23) no longer matches `data/out`. The next push is a new version.
+- **Hugging Face:** the early `v0.1` (pushed 2026-11-23) no longer matches `data/out`. `v0` is ready to push (dry-run passes, P7 gate open); `v1` adds `bipia_textfooler` after P6 and P7 v1.
 - **API cost:** about $23.5 for P3 as tracked ($15.5 original pool, $7.1 hard negatives, about $0.9 hard-negative pilots), plus roughly $4 for earlier pilots and tests.
 
 ## Pipeline
@@ -44,7 +44,7 @@ P7 checks + baselines --> PUSH ALLOWED / BLOCKED --> P10 push
 | **P6** TextFooler test variants | 🟡 built, pilot paused | n/a | Own uv environment (TextAttack); judge + rules validation; needs a fresh pilot on the new negatives |
 | **P7** v0 checks and baselines | ✅ **PUSH ALLOWED** | `p7/p7_checks_v0.md` | Limits from the team (length 0.70, TF-IDF 0.95); "Language Translation" names allowed by team decision |
 | P8–P9 | ⏳ | n/a | n/a |
-| **P10** Push | 🟡 v0.1 pushed, now outdated | `SAIL-Reply/ipi-twins`, tag `v0.1` | Early, partial push; repo name `ipi-twins`; the next push is a new version |
+| **P10** Push | 🟡 versioned (v0, v1); v0 dry-run passes, not pushed | `SAIL-Reply/ipi-twins`, tags `v0`, `v1` | P7 gate enforced; v1 only adds `bipia_textfooler`; repo name `ipi-twins` |
 
 ## Key numbers
 
@@ -184,14 +184,17 @@ Test has **more rows** (43,100) than train (19,480), but train has **more docume
   - TF-IDF scores 0.905 with only hard-negative negatives and 0.923 with only the original ones;
   - without "Language Translation", TF-IDF is 0.914 overall.
 
-### P10: push to Hugging Face (v0.1, record in `archive/p10/v0.1/`)
-- **Early, partial push (team decision):** `v0.1` has `bipia` and `nemotron` (29 columns, original pool) so that a first training could start.
-- **Repository:** `SAIL-Reply/ipi-twins`, private. **Licence** `cc-by-sa-4.0`, with credit to BIPIA (MIT), NVIDIA (CC BY 4.0), Mistral Small (Apache 2.0) and TextAttack (MIT).
-- **Model-free card;** generated from the reports (no hand-typed numbers). Verified with `load_dataset` in a clean environment.
-- **v0.1 is now outdated:** `data/out` has `benign_span` and the new negatives. The next push needs P7 to say PUSH ALLOWED (it does for v0) and gets a new tag.
+### P10: push to Hugging Face (versions v0 and v1)
+- **Versions (the brief's scheme):** `v0` = `bipia` + `nemotron`; `v1` = v0 + `bipia_textfooler` (test). A version is pushed once and tagged with its name, so a training can pin it.
+- **v1 only adds:** `bipia_textfooler/test.parquet` and an updated card. No v0 file is uploaded again, and `p10-verify --version v1` loads every config at `v1`, loads `v0` again, and compares the v0 files byte for byte (sha256) between the two tags.
+- **The P7 gate is now in the code:** `p10-push --push` stops unless `reports/p7/p7_checks_<version>.json` says PUSH ALLOWED and is newer than the data it checked. A dry-run always runs and shows the gate. P7 v0 says PUSH ALLOWED; P7 v1 does not exist yet, so v1 stays blocked until P6 is finished and P7 v1 is built.
+- **The card** keeps the v0 text and, from v1, adds the TextFooler section: ProtectAI as the victim (revision and licence read from its model card by P6), the constraint values, the window rule, the attempted / skipped / fooled / failed / kept counts, and the note that only variants that fooled the victim are kept. TextAttack (MIT) is in the licences. The card also has the hard-negatives section (what, why, filters, judge-v4, prompts, share per split) and the P7 baselines.
+- **Safety:** a dry-run never calls the Hub; `--push` refuses a public repo, an existing tag, and a v1 without a `v0` tag; the staged files are scanned for token patterns and the actual token value.
+- **Repository:** `SAIL-Reply/ipi-twins`, private, licence `cc-by-sa-4.0`. The early `v0.1` push (29 columns, original pool, before this scheme) is recorded in `archive/p10/v0.1/`; `v0` replaces it in `main` and the `v0.1` tag keeps it reachable.
+- **Status:** v0 dry-run passes (the card is in `reports/p10/p10_dataset_card_v0.md`); not pushed. The user runs the push after confirming that the data is final.
 
 ## Open points for the team
-1. **Next push:** push the current v0 as a new version (e.g. `v0.2`) so that trainings use the hard negatives?
+1. **Push v0:** the card is ready for review (`reports/p10/p10_dataset_card_v0.md`); the user confirms the data is final and runs the push.
 2. **P6:** run a new pilot on the current negatives, then decide on the full run from its projected CPU time.
 3. **Train tables and hard negatives:** with option (a), train tables have 10% hard negatives (test 40%). Revisit if a trained detector shows weak results on instruction-like benign tables.
 4. **Evaluation:** report test metrics per `attack_group`, and with and without "Language Translation".

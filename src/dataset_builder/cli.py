@@ -235,48 +235,53 @@ def p10_push(
     push: Annotated[
         bool, typer.Option("--push", help="Upload to Hugging Face. Without it: dry-run only.")
     ] = False,
-    tag: Annotated[str, typer.Option(help="Version tag created on the pushed commit.")] = "v0.1",
-    configs: Annotated[
-        str | None, typer.Option(help="Comma-separated configs (default: dataset.push_configs).")
-    ] = None,
+    version: Annotated[
+        str, typer.Option("--version", help="v0 (bipia + nemotron) or v1 (+ bipia_textfooler).")
+    ] = "v0",
 ) -> None:
-    """P10: preflight, dataset card, staging and secret scan; uploads only with --push."""
+    """P10: preflight, dataset card, staging, secret scan and the P7 gate for one version.
+    Uploads only with --push, and only if P7 says PUSH ALLOWED for that version."""
     from dataset_builder.steps import p10_push as p10
 
     opts: RunOptions = ctx.obj
-    names = [c.strip() for c in configs.split(",")] if configs else None
-    out = p10.run(opts.cfg, do_push=push, tag=tag, configs=names)
+    out = p10.run(opts.cfg, version=version, do_push=push)
     for name, st in out["files"].items():
-        typer.echo(f"{name + ':':<22} {st['rows']:>7,} rows")
-    typer.echo(f"card:    {out['card']}")
-    typer.echo(f"staged:  {out['stage_dir']}")
-    typer.echo("secrets: none found in the staged files")
-    typer.echo(f"report:  {out['report']}")
+        typer.echo(f"{name + ':':<26} {st['rows']:>7,} rows")
+    typer.echo(f"uploads:  {', '.join(out['uploads'])} + the card (other configs untouched)")
+    typer.echo(f"card:     {out['card']}")
+    typer.echo(f"staged:   {out['stage_dir']}")
+    typer.echo("secrets:  none found in the staged files")
+    typer.echo(
+        f"P7 gate:  {out['gate']['status']}"
+        + (f" ({out['gate']['reason']})" if out["gate"]["reason"] else "")
+    )
+    typer.echo(f"report:   {out['report']}")
     if push:
-        typer.echo(f"pushed:  {opts.cfg.dataset.repo_id} @ {out['push']['commit']} (tag {tag})")
-        typer.echo(f"Next: uv run dataset-builder p10-verify --tag {tag}")
+        typer.echo(
+            f"pushed:   {opts.cfg.dataset.repo_id} @ {out['push']['commit']} (tag {version})"
+        )
+        typer.echo(f"Next: uv run dataset-builder p10-verify --version {version}")
     else:
         typer.echo(
-            "Dry-run: nothing was uploaded. Read the card, then run with --push "
-            f"--tag {tag} to upload to {opts.cfg.dataset.repo_id}."
+            "Dry-run: nothing was uploaded. Read the card, confirm the data is final, then run "
+            f"with --push --version {version} to upload to {opts.cfg.dataset.repo_id}."
         )
 
 
 @app.command("p10-verify")
 def p10_verify(
     ctx: typer.Context,
-    tag: Annotated[str, typer.Option(help="Tag (or revision) to load.")] = "v0.1",
-    configs: Annotated[
-        str | None, typer.Option(help="Comma-separated configs (default: dataset.push_configs).")
-    ] = None,
+    version: Annotated[str, typer.Option("--version", help="Tag to load: v0 or v1.")] = "v0",
 ) -> None:
-    """P10: load every config and split from the Hub in a clean environment; check the counts."""
+    """P10: load every config and split at the version's tag in a clean environment and check
+    the counts against the reports (v1: also check that v0 is unchanged)."""
     from dataset_builder.steps import p10_push as p10
 
-    names = [c.strip() for c in configs.split(",")] if configs else None
-    out = p10.run_verify(ctx.obj.cfg, tag=tag, configs=names)
+    out = p10.run_verify(ctx.obj.cfg, version=version)
     for name, st in out["loaded"].items():
-        typer.echo(f"{name + ':':<22} {st['rows']:>7,} rows loaded")
+        typer.echo(f"{name + ':':<26} {st['rows']:>7,} rows loaded")
+    if out["v0_unchanged"]:
+        typer.echo(f"v0 unchanged: {len(out['v0_unchanged']['files_compared'])} files identical")
     typer.echo(f"private: {out['private']}  |  secrets in remote files: none")
     typer.echo(f"PASSED. report: {out['report']}")
 

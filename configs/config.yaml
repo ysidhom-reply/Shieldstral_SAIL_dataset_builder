@@ -9,9 +9,8 @@ dataset:
   configs: [bipia, nemotron, bipia_textfooler]
   pretty_name: ipi-twins
   license: cc-by-sa-4.0         # share-alike: BIPIA's table and code contexts are CC BY-SA 4.0
-  # P10 v0.1 (team decision, 2026-11-23): push bipia + nemotron before P6-P9 so training can
-  # start; bipia_textfooler is added in the final push (v1.0).
-  push_configs: [bipia, nemotron]
+  # P10 versions: v0 = bipia + nemotron; v1 = v0 + bipia_textfooler (test). A version is pushed
+  # once and tagged with its name; v1 only adds bipia_textfooler (see steps/p10_push.py).
 
 # Relative to the repository root.
 paths:

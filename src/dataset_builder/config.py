@@ -28,7 +28,6 @@ class DatasetCfg(_Strict):
     configs: list[str]
     pretty_name: str = "ipi-twins"
     license: str = "cc-by-sa-4.0"
-    push_configs: list[str] = []  # configs pushed by P10 (v0.1: bipia, nemotron)
 
 
 class PathsCfg(_Strict):

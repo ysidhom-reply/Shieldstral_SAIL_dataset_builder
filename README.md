@@ -106,7 +106,7 @@ uv run dataset-builder [--pilot | --full] [--force] [--config PATH] <command>
 | P5 Nemotron test set | `--full p5-nemotron` | `data/out/nemotron/test.parquet`, `reports/p5/p5_nemotron.md` |
 | P6 TextFooler test variants (P6 environment) | `p6-textfooler` (pilot, 20 samples), then `--full p6-textfooler` | `data/out/bipia_textfooler/test.parquet`, `data/interim/p6_results.jsonl` (resumable), `reports/p6/p6_textfooler.md` |
 | P7 checks and shortcut baselines | `p7-checks --version v0` (v1, v2 later) | `reports/p7/p7_checks_<version>.{md,json}`; exit 0 = PUSH ALLOWED, 1 = a data check failed, 2 = a baseline limit exceeded |
-| P10 push to Hugging Face | `p10-push` (dry-run), then `p10-push --push --tag <version>`, then `p10-verify --tag <version>` | `data/interim/p10_stage/` (card + files), `reports/p10/p10_push.md`, `reports/p10/p10_dataset_card.md` |
+| P10 push to Hugging Face (versions v0, v1) | `p10-push --version v0` (dry-run), then `p10-push --push --version v0`, then `p10-verify --version v0`; v1 the same with `--version v1` | `data/interim/p10_stage/` (files this version adds + card), `reports/p10/p10_push_<version>.md`, `reports/p10/p10_dataset_card_<version>.md` |
 
 Every command is run as `uv run dataset-builder <command>` (P6: in the P6 environment, see above).
 
@@ -131,9 +131,13 @@ nothing to `data/out`.
   to say **PUSH ALLOWED**. `p10-push` is a dry-run unless `--push` is given; it stops if a step
   report has a failed check, a count differs, a column is not in the schema, or a staged file
   contains something that looks like a secret. It refuses a public repo or an existing tag.
-- **v0.1 (team decision, 2026-11-23):** `bipia` and `nemotron` were pushed before P6-P9 so that
-  training could start. `data/out` has changed since (`benign_span`, hard negatives), so the next
-  push is a new version.
+- **Versions:** `v0` = `bipia` + `nemotron`; `v1` = v0 + `bipia_textfooler` (test). A version is
+  pushed once and tagged with its name. `v1` only adds `bipia_textfooler` and updates the card:
+  no v0 file is uploaded again, and `p10-verify --version v1` checks that v0 is unchanged. The
+  early `v0.1` push (before this scheme) is recorded in `reports/archive/p10/v0.1/`.
+- The P7 gate is enforced in code: `p10-push --push` stops unless `p7_checks_<version>.json`
+  says PUSH ALLOWED and is newer than the data it checked. A dry-run always runs and shows the
+  gate.
 
 ## Development
 

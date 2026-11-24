@@ -1,4 +1,7 @@
 import json
+import os
+import time
+from pathlib import Path
 from types import SimpleNamespace
 
 import pyarrow as pa
@@ -11,6 +14,7 @@ from dataset_builder.steps import p10_push as p10
 
 SIZES = {("bipia", "train"): 8, ("bipia", "validation"): 4, ("bipia", "test"): 6}
 SIZES[("nemotron", "test")] = 4
+SIZES[("bipia_textfooler", "test")] = 4
 
 
 def _table(config: str, split: str, n: int, extra: bool = False) -> pa.Table:
@@ -78,6 +82,51 @@ def _write_reports(cfg, failures=None, p4_train=8):
         (r / rel).write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _write_p6(cfg):
+    bucket = {"processed": 30, "skipped": 4, "succeeded": 12, "failed": 14, "kept": 2}
+    payload = {
+        "split": {"test": 4},
+        "failures": [],
+        "stats": {
+            "by_bucket": {"email/1": bucket, "email/0": bucket},
+            "all": {"succeeded": 24, "failed": 28},
+        },
+        "info": {
+            "victim": "protectai/victim-model@abc999",
+            "victim_license": "apache-2.0",
+            "versions": {"textattack": "0.3.11"},
+            "constraints": {
+                "max_candidates": 50,
+                "min_cos_sim": 0.5,
+                "use_threshold": 0.84,
+                "use_window": 15,
+                "max_span_fraction": 0.3,
+                "search": "GreedyWordSwapWIR",
+                "goal": "UntargetedClassification",
+            },
+        },
+    }
+    path = cfg.paths.reports / "p6" / "p6_textfooler.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _write_p7(cfg, version="v0", status="PUSH ALLOWED", exit_code=0, newer=True):
+    ok = {"auc": 0.6, "recall": 0.1, "n": 6}
+    payload = {
+        "status": status,
+        "exit_code": exit_code,
+        "limits": {"length_auc_stop": 0.7, "tfidf_auc_stop": 0.95},
+        "baselines": {"length": {"bipia test": {"all": ok}}, "tfidf": {"bipia test": {"all": ok}}},
+        "nemotron_length": {"all": {"auc": 0.98, "positive_longer": 1.0}},
+    }
+    path = cfg.paths.reports / "p7" / f"p7_checks_{version}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    t = time.time() + (100 if newer else -100)
+    os.utime(path, (t, t))
+
+
 def _write_data(cfg, extra=False):
     for (config, split), n in SIZES.items():
         path = cfg.paths.out / config / f"{split}.parquet"
@@ -89,8 +138,16 @@ def _write_data(cfg, extra=False):
 def ready(cfg, monkeypatch):
     _write_reports(cfg)
     _write_data(cfg)
+    _write_p7(cfg)
     monkeypatch.setattr(p10, "_known_secrets", lambda: [])
     return cfg
+
+
+@pytest.fixture
+def ready_v1(ready):
+    _write_p6(ready)
+    _write_p7(ready, "v1")
+    return ready
 
 
 def test_dry_run_builds_card_and_never_calls_the_hub(ready, monkeypatch):
@@ -100,7 +157,7 @@ def test_dry_run_builds_card_and_never_calls_the_hub(ready, monkeypatch):
         raise AssertionError("the dry-run must not create an HfApi")
 
     monkeypatch.setattr(huggingface_hub, "HfApi", boom)
-    out = p10.run(ready, tag="v0.1", configs=["bipia", "nemotron"])
+    out = p10.run(ready, version="v0")
 
     assert out["action"] == "dry-run" and "push" not in out
     card = out["card"].read_text(encoding="utf-8")
@@ -130,21 +187,21 @@ def test_preflight_stops_on_failed_step_report(cfg, monkeypatch):
     _write_data(cfg)
     monkeypatch.setattr(p10, "_known_secrets", lambda: [])
     with pytest.raises(RuntimeError, match="failed checks"):
-        p10.run(cfg, configs=["bipia", "nemotron"])
+        p10.run(cfg)
 
 
 def test_preflight_stops_on_count_mismatch(cfg, monkeypatch):
     _write_reports(cfg, p4_train=10)
     _write_data(cfg)
     with pytest.raises(CountMismatchError, match="bipia/train: 8 rows, the report says 10"):
-        p10.run(cfg, configs=["bipia", "nemotron"])
+        p10.run(cfg)
 
 
 def test_preflight_stops_on_extra_column(cfg):
     _write_reports(cfg)
     _write_data(cfg, extra=True)
     with pytest.raises(CountMismatchError, match=r"extra \['doc_id'\]"):
-        p10.run(cfg, configs=["bipia", "nemotron"])
+        p10.run(cfg)
 
 
 def test_scan_secrets_finds_patterns_and_known_values(tmp_path):
@@ -163,7 +220,7 @@ def test_scan_secrets_finds_patterns_and_known_values(tmp_path):
 def test_secret_in_staged_file_stops_the_run(ready, monkeypatch):
     monkeypatch.setattr(p10, "_known_secrets", lambda: [b"abc123"])  # the BIPIA commit in the card
     with pytest.raises(p10.SecretFoundError):
-        p10.run(ready, configs=["bipia", "nemotron"])
+        p10.run(ready)
 
 
 def test_filter_rates_from_report():
@@ -197,28 +254,148 @@ class FakeApi:
 
 def test_push_uploads_and_tags(ready):
     api = FakeApi()
-    out = p10.run(ready, do_push=True, tag="v0.1", configs=["bipia", "nemotron"], api=api)
+    out = p10.run(ready, version="v0", do_push=True, api=api)
     assert out["push"] == {
         "commit": "c0ffee",
         "commit_url": "https://example/commit",
-        "tag": "v0.1",
+        "tag": "v0",
     }
     (kind, up), (kind2, tag) = api.calls
     assert (
         kind == "upload" and up["repo_type"] == "dataset" and up["repo_id"] == ready.dataset.repo_id
     )
-    assert kind2 == "tag" and tag["tag"] == "v0.1" and tag["revision"] == "c0ffee"
+    assert kind2 == "tag" and tag["tag"] == "v0" and tag["revision"] == "c0ffee"
 
 
 def test_push_refuses_public_repo(ready):
     api = FakeApi(private=False)
     with pytest.raises(RuntimeError, match="not private"):
-        p10.run(ready, do_push=True, configs=["bipia", "nemotron"], api=api)
+        p10.run(ready, do_push=True, api=api)
     assert api.calls == []
 
 
 def test_push_refuses_existing_tag(ready):
-    api = FakeApi(tags=["v0.1"])
+    api = FakeApi(tags=["v0"])
     with pytest.raises(RuntimeError, match="already exists"):
-        p10.run(ready, do_push=True, tag="v0.1", configs=["bipia", "nemotron"], api=api)
+        p10.run(ready, version="v0", do_push=True, api=api)
     assert api.calls == []
+
+
+# ------------------------------------------------------------------ P7 gate
+
+
+def test_gate_open_when_p7_allows_and_is_newer_than_the_data(ready):
+    gate = p10.p7_gate(ready, "v0", ["bipia", "nemotron"])
+    assert gate["ok"] and gate["status"] == "PUSH ALLOWED"
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "reason"),
+    [
+        ({"status": "PUSH BLOCKED", "exit_code": 2}, "PUSH BLOCKED"),
+        ({"newer": False}, "older than the data"),
+    ],
+)
+def test_gate_closed_when_p7_blocks_or_is_stale(ready, kwargs, reason):
+    _write_p7(ready, **kwargs)
+    gate = p10.p7_gate(ready, "v0", ["bipia", "nemotron"])
+    assert not gate["ok"] and reason in gate["reason"]
+
+
+def test_gate_closed_when_p7_is_missing(cfg):
+    assert "not found" in p10.p7_gate(cfg, "v1", ["bipia"])["reason"]
+
+
+def test_push_is_blocked_by_the_gate_but_a_dry_run_still_works(ready):
+    _write_p7(ready, status="PUSH BLOCKED", exit_code=2)
+    out = p10.run(ready)  # dry-run: reports the closed gate, uploads nothing
+    assert out["gate"]["ok"] is False and "A push is blocked" in out["report"].read_text("utf-8")
+    api = FakeApi()
+    with pytest.raises(p10.PushBlockedError, match="PUSH BLOCKED"):
+        p10.run(ready, do_push=True, api=api)
+    assert api.calls == []
+
+
+# ------------------------------------------------------------------ v1
+
+
+def test_v1_stages_only_the_new_config_and_a_card_with_the_textfooler_section(ready_v1):
+    out = p10.run(ready_v1, version="v1")
+    staged = sorted(
+        p.relative_to(out["stage_dir"]).as_posix()
+        for p in out["card"].parent.rglob("*")
+        if p.is_file()
+    )
+    assert staged == ["README.md", "bipia_textfooler/test.parquet"]  # v0 files not uploaded again
+    assert out["uploads"] == ["bipia_textfooler"] and out["gate"]["ok"]
+    card = out["card"].read_text(encoding="utf-8")
+    assert "config_name: bipia_textfooler" in card and "config_name: bipia" in card
+    assert "How `bipia_textfooler` was built" in card and "Not yet included" not in card
+    assert "protectai/victim-model" in card and "revision `abc999`" in card
+    assert "apache-2.0" in card  # the victim's licence, from its model card
+    assert "TextAttack" in card and "MIT" in card
+    assert "Only variants that fooled the victim are kept" in card
+    assert "0.84" in card and "stride 256" in card  # constraint values and the window rule
+    assert "| email | attacked (1) | 30 | 4 | 12 | 14 | 2 |" in card  # attempts per class
+    assert "Version `v1`" in card
+
+
+def test_v1_needs_the_p6_report(ready):
+    with pytest.raises(FileNotFoundError, match="p6_textfooler"):
+        p10.run(ready, version="v1")
+
+
+def test_v1_push_needs_the_v0_tag_and_never_uploads_v0_files(ready_v1):
+    api = FakeApi(tags=[])
+    with pytest.raises(RuntimeError, match="tag 'v0' does not exist"):
+        p10.run(ready_v1, version="v1", do_push=True, api=api)
+    api = FakeApi(tags=["v0"])
+    out = p10.run(ready_v1, version="v1", do_push=True, api=api)
+    assert out["push"]["tag"] == "v1"
+    (_, up), (_, tag) = api.calls
+    uploaded = sorted(p.name for p in Path(up["folder_path"]).rglob("*"))
+    assert "train.parquet" not in uploaded and "test.parquet" in uploaded
+    assert tag["tag"] == "v1"
+
+
+def test_v1_refuses_an_existing_tag(ready_v1):
+    api = FakeApi(tags=["v0", "v1"])
+    with pytest.raises(RuntimeError, match="already exists"):
+        p10.run(ready_v1, version="v1", do_push=True, api=api)
+
+
+def test_unknown_version(ready):
+    with pytest.raises(ValueError, match="unknown version"):
+        p10.run(ready, version="v9")
+
+
+def test_compare_files_finds_changed_and_missing_files(tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    for d in (a, b):
+        (d / "x").mkdir(parents=True)
+        (d / "x" / "one.parquet").write_bytes(b"same")
+        (d / "x" / "two.parquet").write_bytes(b"same")
+    assert p10.compare_files(a, b, ["x/one.parquet", "x/two.parquet"]) == []
+    (b / "x" / "two.parquet").write_bytes(b"changed")
+    (b / "x" / "one.parquet").unlink()
+    diff = p10.compare_files(a, b, ["x/one.parquet", "x/two.parquet"])
+    assert diff == ["x/one.parquet: missing in second", "x/two.parquet: content differs"]
+
+
+def test_card_has_hard_negatives_and_p7_sections_when_the_reports_exist(ready):
+    (ready.paths.reports / "p3" / "p3_hard_negatives.json").write_text(
+        json.dumps(
+            {
+                "counts": {"new": 7, "replaced": 7},
+                "reach": {"table|start|1": 10, "table|start|4": 8},
+                "rejected": {"table|start|4": 1},
+                "judge_control": {"n": 40, "flagged": 40},
+                "failures": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    card = p10.run(ready)["card"].read_text(encoding="utf-8")
+    assert "## Hard negatives" in card and "7 hard negatives replaced" in card
+    assert "## Checks and shortcut baselines" in card and "0.600" in card
+    assert "Language Translation" in card  # known limit kept

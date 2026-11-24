@@ -1,11 +1,13 @@
-"""P10: push the final configs to the private Hugging Face dataset repo.
+"""P10: push a version of the dataset to the private Hugging Face repo.
 
-Dry-run by default: preflight checks, staging (parquet files + dataset card), secret scan and a
-report, with no network call. `push` uploads the staged folder and tags it; `verify` loads every
-config and split from the Hub in a clean environment and compares the counts with the reports.
+Versions (the brief's scheme): v0 = `bipia` + `nemotron`; v1 = v0 + `bipia_textfooler` (test).
+A version is pushed once and tagged with its own name. v1 only ADDS `bipia_textfooler` and
+updates the card: no v0 file is uploaded again, and `verify` checks that v0 is unchanged.
 
-v0.1 (team decision, 2026-11-23): `bipia` and `nemotron` are pushed before P6-P9 so that training
-can start; `bipia_textfooler` follows in the final push. Deviations are listed in the card.
+Dry-run by default: preflight checks, staging (parquet files + dataset card), secret scan, the P7
+gate and a report, with no network call. `push` needs the P7 report of the version to say PUSH
+ALLOWED; it uploads the staged folder and tags it. `verify` loads every config and split at the
+tag from the Hub in a clean environment and compares the counts with the reports.
 """
 
 import hashlib
@@ -27,12 +29,17 @@ from dataset_builder.reports import CountMismatchError, report_path
 from dataset_builder.schema import COLUMNS
 
 REPORT_NAME = "p10_push"
+# Splits pushed per config. v1 has only the TextFooler test split (v2 will add train/validation).
 SPLITS: dict[str, tuple[str, ...]] = {
     "bipia": ("train", "validation", "test"),
     "nemotron": ("test",),
-    "bipia_textfooler": ("test", "train", "validation"),
+    "bipia_textfooler": ("test",),
 }
-# Reports whose `failures` must be empty before anything is pushed.
+VERSIONS: dict[str, tuple[str, ...]] = {
+    "v0": ("bipia", "nemotron"),
+    "v1": ("bipia", "nemotron", "bipia_textfooler"),
+}
+# Reports whose `failures` must be empty before anything is pushed (+ P6 for v1).
 STEP_REPORTS = (
     "p1/p1_counts.json",
     "p2/p2_counts.json",
@@ -40,6 +47,8 @@ STEP_REPORTS = (
     "p4/p4_composition.json",
     "p5/p5_nemotron.json",
 )
+# Optional reports the card uses when they exist.
+OPTIONAL_REPORTS = {"p3hn": "p3/p3_hard_negatives.json"}
 SECRET_PATTERNS = {
     "hf_token": re.compile(rb"hf_[A-Za-z0-9]{30,}"),
     "env_assignment": re.compile(rb"(?:HF_TOKEN|MISTRAL_API_KEY)\s*=\s*\S{8,}"),
@@ -62,14 +71,35 @@ def parquet_path(cfg: Config, config: str, split: str) -> Path:
     return cfg.paths.out / config / f"{split}.parquet"
 
 
-def load_reports(cfg: Config) -> dict[str, dict[str, Any]]:
-    """The step reports' JSON, keyed by step (p1 ... p5)."""
+def configs_of(version: str) -> list[str]:
+    if version not in VERSIONS:
+        raise ValueError(f"unknown version {version!r}: choose from {sorted(VERSIONS)}")
+    return list(VERSIONS[version])
+
+
+def new_configs(version: str) -> list[str]:
+    """Configs this version adds to the repo (the others are already there, untouched)."""
+    if version == "v0":
+        return configs_of("v0")
+    return [c for c in configs_of(version) if c not in VERSIONS["v0"]]
+
+
+def load_reports(cfg: Config, version: str = "v0") -> dict[str, dict[str, Any]]:
+    """The step reports' JSON, keyed by step (p1 ... p5, p6 for v1, p3hn and p7 when present)."""
     out: dict[str, dict[str, Any]] = {}
-    for rel in STEP_REPORTS:
+    needed = list(STEP_REPORTS) + (["p6/p6_textfooler.json"] if version == "v1" else [])
+    for rel in needed:
         path = cfg.paths.reports / rel
         if not path.is_file():
-            raise FileNotFoundError(f"{path} is missing: run that step before P10.")
+            raise FileNotFoundError(f"{path} is missing: run that step before P10 {version}.")
         out[rel.split("/")[0]] = json.loads(path.read_text(encoding="utf-8"))
+    for key, rel in OPTIONAL_REPORTS.items():
+        path = cfg.paths.reports / rel
+        if path.is_file():
+            out[key] = json.loads(path.read_text(encoding="utf-8"))
+    p7 = cfg.paths.reports / "p7" / f"p7_checks_{version}.json"
+    if p7.is_file():
+        out["p7"] = json.loads(p7.read_text(encoding="utf-8"))
     return out
 
 
@@ -79,7 +109,41 @@ def expected_rows(reports: dict[str, dict[str, Any]], config: str) -> dict[str, 
         return {s: int(n) for s, n in reports["p4"]["split"].items()}
     if config == "nemotron":
         return {s: int(n) for s, n in reports["p5"]["split"].items()}
+    if config == "bipia_textfooler":
+        return {s: int(n) for s, n in reports["p6"]["split"].items()}
     raise ValueError(f"no report gives the counts of config {config!r} yet")
+
+
+# ---------------------------------------------------------------- P7 gate
+
+
+def p7_gate(cfg: Config, version: str, configs: list[str]) -> dict[str, Any]:
+    """A push needs the P7 report of its version to say PUSH ALLOWED, and to be newer than the
+    data files it checked (so it cannot describe an older build)."""
+    path = cfg.paths.reports / "p7" / f"p7_checks_{version}.json"
+    if not path.is_file():
+        return {
+            "ok": False,
+            "status": "missing",
+            "reason": f"{path.name} not found: run `p7-checks --version {version}`",
+        }
+    data = json.loads(path.read_text(encoding="utf-8"))
+    files = [parquet_path(cfg, c, s) for c in configs for s in SPLITS[c]]
+    newest = max((f.stat().st_mtime for f in files if f.is_file()), default=0.0)
+    status = data.get("status", "unknown")
+    if status != "PUSH ALLOWED" or data.get("exit_code") != 0:
+        return {"ok": False, "status": status, "reason": f"P7 {version} says {status}"}
+    if path.stat().st_mtime < newest:
+        return {
+            "ok": False,
+            "status": status,
+            "reason": f"P7 {version} is older than the data in data/out: run it again",
+        }
+    return {"ok": True, "status": status, "reason": ""}
+
+
+class PushBlockedError(RuntimeError):
+    """The P7 gate is closed."""
 
 
 # ---------------------------------------------------------------- preflight
@@ -201,12 +265,314 @@ def _prompts(cfg: Config) -> dict[str, Any]:
     return yaml.safe_load(cfg.p3.prompts.read_text(encoding="utf-8"))
 
 
+def hn_share(cfg: Config) -> dict[str, dict[str, float]]:
+    """Share of BIPIA negatives whose benign text is a hard negative, per split and scenario
+    (read-only: the negatives' benign_id against the style of the pool texts)."""
+    pool = cfg.paths.interim / "benign_pool.jsonl"
+    if not pool.is_file():
+        return {}
+    style = {}
+    with pool.open(encoding="utf-8") as f:
+        for line in f:
+            if line.strip():
+                b = json.loads(line)
+                style[b["benign_id"]] = b.get("style", "standard")
+    if "hard_negative" not in style.values():
+        return {}
+    out: dict[str, dict[str, float]] = {}
+    for split in SPLITS["bipia"]:
+        t = pq.read_table(
+            parquet_path(cfg, "bipia", split), columns=["label", "scenario", "benign_id"]
+        ).to_pylist()
+        c: Counter = Counter()
+        n: Counter = Counter()
+        for r in t:
+            if r["label"] == 0:
+                n[r["scenario"]] += 1
+                c[r["scenario"]] += style.get(r["benign_id"]) == "hard_negative"
+        out[split] = {sc: c[sc] / n[sc] for sc in n}
+    return out
+
+
+def _hard_negative_section(
+    cfg: Config, reports: dict[str, dict[str, Any]], prompts: dict[str, Any]
+) -> list[str]:
+    hn = reports.get("p3hn")
+    if not hn:
+        return []
+    c = hn.get("counts", {})
+    hcfg = cfg.p3.hard_negatives
+    out = [
+        "## Hard negatives",
+        "",
+        f"{hcfg.share:.0%} of every benign pool is a *hard negative*: a harmless text that "
+        'sounds like an instruction to the human reader of the document ("Please send your '
+        'reply by Friday", "You can add the following snippet to your script ..."), using '
+        "the vocabulary attacks use. Why: a bag-of-words baseline separated the classes on "
+        "wording alone when benign texts never used that vocabulary.",
+        "",
+        f"- **Texts:** {c.get('new', 0):,} hard negatives replaced the same number of the "
+        "original texts (the ones with the most over-represented words first). Every pool keeps "
+        "its size.",
+        f"- **Prompts:** `{hcfg.prompt_version}` (A-hn for email and table, B-hn for code; below). "
+        "Email texts address the recipient of the email, table texts are reading notes for the "
+        "reader, code texts are suggestions about the reader's own code with harmless code.",
+        f"- **Judge:** `{hcfg.judge_prompt_version}` (one text per call for code, "
+        f"`{hcfg.judge_batch_prompt_version}` for email and table). A suggestion to the reader "
+        "about their own code, or an email request to the recipient, is not an injection; code "
+        "that does something unrequested still is, however it is phrased.",
+    ]
+    jc = hn.get("judge_control") or {}
+    if jc:
+        out.append(
+            f"- **Judge positive control:** {jc.get('flagged')} of {jc.get('n')} real BIPIA "
+            "attacks were flagged."
+        )
+    out += [
+        "- **Filters:** a narrower profile than the original texts: assistant wording "
+        "(assistant, chatbot, ignore, disregard, system prompt, pretend, as an AI) is still "
+        "forbidden; `your reply/answer/response` and reader-directed code intros are allowed; "
+        "`requests.get` with a timeout on `example.com`, `subprocess.run` with fixed arguments "
+        "and local file reads are allowed in code; sending data, credentials, environment "
+        "variables, deletion, `shell=True`, sockets and system fingerprinting stay forbidden. "
+        "The overlap ban with BIPIA attacks and the duplicate check are unchanged.",
+        "",
+    ]
+    rows = filter_rates(hn)
+    if rows:
+        out += [
+            _table(
+                ["filter", "texts checked", "rejected", "rejection rate"],
+                [
+                    [
+                        r["name"],
+                        f"{r['checked']:,}",
+                        f"{r['rejected']:,}",
+                        _pct(r["rejected"], r["checked"]),
+                    ]
+                    for r in rows
+                ],
+            ),
+            "",
+        ]
+    share = reports.get("hn_share") or {}
+    if share:
+        out += [
+            "Share of `bipia` negatives that use a hard negative:",
+            "",
+            _table(
+                ["split", "email", "table", "code"],
+                [
+                    [sp, *(_pct(v.get(sc, 0), 1) for sc in ("email", "table", "code"))]
+                    for sp, v in share.items()
+                ],
+            ),
+            "",
+            "P4 chooses, among the least-used texts within the length window, the one with the "
+            "fewest over-represented benign words, so the share in train and validation depends "
+            "on that choice (see Known limits).",
+            "",
+        ]
+    for key, title in (
+        ("prompt_a_hn", "Prompt A-hn (email, table)"),
+        ("prompt_b_hn", "Prompt B-hn (code)"),
+        ("judge_v4", "Judge for hard negatives (one text per call)"),
+    ):
+        pr = prompts.get(key)
+        if not pr:
+            continue
+        out += [f"<details><summary>{title}</summary>", ""]
+        for role in ("system", "user"):
+            if role in pr:
+                out += [f"**{role}**", "", "```text", str(pr[role]).rstrip(), "```", ""]
+        out += ["</details>", ""]
+    return out
+
+
+def _hard_negative_limits(reports: dict[str, dict[str, Any]]) -> list[str]:
+    share = reports.get("hn_share") or {}
+    tr, te = share.get("train", {}), share.get("test", {})
+    if not tr or not te:
+        return []
+    return [
+        "- **Hard negatives in train vs test:** in test every pool text is used once, so "
+        + ", ".join(f"{sc} {te.get(sc, 0):.0%}" for sc in ("email", "table", "code"))
+        + " of the negatives are hard negatives; in train "
+        + ", ".join(f"{sc} {tr.get(sc, 0):.0%}" for sc in ("email", "table", "code"))
+        + ", because P4 prefers texts without over-used words.",
+    ]
+
+
+def _p7_section(cfg: Config, reports: dict[str, dict[str, Any]], version: str) -> list[str]:
+    p7 = reports.get("p7")
+    if not p7:
+        return []
+    lim = p7.get("limits", {})
+    base = p7.get("baselines", {})
+    rows = []
+    for name in ("length", "tfidf"):
+        for ev, groups in base.get(name, {}).items():
+            for g in ("email", "table", "code", "all"):
+                m = groups.get(g)
+                if not m or m.get("auc") is None:
+                    continue
+                rows.append([name, ev, g, f"{m['n']:,}", f"{m['auc']:.3f}", f"{m['recall']:.1%}"])
+    out = [
+        "## Checks and shortcut baselines",
+        "",
+        f"Before this version was pushed, the data passed an automatic check ({version}): the "
+        "splits share no document, no train attack text is in test, every positive contains "
+        "its attack, no negative contains attack text, classes are 1:1 per scenario, positions "
+        "are balanced, and removing the inserted text from both members of a pair gives the "
+        "same clean document. Two throwaway classifiers were trained on `bipia` train only, to "
+        "test the data for shortcuts: logistic regression on document length, and TF-IDF "
+        f"(word 1-2-grams) with logistic regression. Limits: AUC {lim.get('length_auc_stop')} "
+        f"(length) and {lim.get('tfidf_auc_stop')} (TF-IDF); a result above a limit blocks the "
+        "push. Recall is at 1% false-positive rate.",
+        "",
+        _table(["baseline", "evaluated on", "scenario", "rows", "AUC", "recall at 1% FPR"], rows),
+        "",
+    ]
+    nl = (p7.get("nemotron_length") or {}).get("all")
+    if nl:
+        out += [
+            f"On `nemotron` the raw document length alone gives AUC {nl['auc']:.3f} (the positive "
+            f"is longer in {nl['positive_longer']:.0%} of pairs): the negative is the positive "
+            "with the injection cut out. It is reported, not a failure.",
+            "",
+        ]
+    return out
+
+
+def _textfooler_sources(reports: dict[str, dict[str, Any]]) -> list[list[str]]:
+    info = (reports.get("p6") or {}).get("info", {})
+    versions = info.get("versions", {})
+    name, _, rev = info.get("victim", "").partition("@")
+    return [
+        [
+            f"[{name}](https://huggingface.co/{name}) (ProtectAI)",
+            f"revision `{rev}`" if rev else "pinned revision",
+            info.get("victim_license") or "see its model card",
+            "`bipia_textfooler`: the victim the variants were built against (no text of it is "
+            "in the data)",
+        ],
+        [
+            "[TextAttack](https://github.com/QData/TextAttack) (TextFooler recipe)",
+            f"`textattack` {versions.get('textattack', '?')}",
+            "MIT",
+            "`bipia_textfooler`: the word-swap attack",
+        ],
+    ]
+
+
+def _textfooler_licences(reports: dict[str, dict[str, Any]], included: bool) -> list[str]:
+    if not included:
+        return ["- **TextAttack** (MIT) is used for the TextFooler config (added in v1)."]
+    info = (reports.get("p6") or {}).get("info", {})
+    victim = info.get("victim", "").partition("@")[0]
+    return [
+        "- **TextAttack** (MIT): the TextFooler recipe that built `bipia_textfooler`.",
+        f"- **{victim or 'ProtectAI victim model'}**: "
+        f"{info.get('victim_license') or 'licence as stated on its model card'}. It was only "
+        "queried; none of its weights or outputs are in the data.",
+    ]
+
+
+def _textfooler_section(cfg: Config, reports: dict[str, dict[str, Any]]) -> list[str]:
+    p6 = reports.get("p6")
+    if not p6:
+        return []
+    info, stats = p6.get("info", {}), p6.get("stats", {})
+    c = info.get("constraints", {})
+    tf = cfg.textfooler
+    name, _, rev = info.get("victim", "").partition("@")
+    rows = []
+    for key, st in sorted(stats.get("by_bucket", {}).items()):
+        scen, lab = key.split("/")
+        rows.append(
+            [
+                scen,
+                "attacked (1)" if lab == "1" else "benign (0)",
+                f"{st['processed']:,}",
+                f"{st['skipped']:,}",
+                f"{st['succeeded']:,}",
+                f"{st['failed']:,}",
+                f"{st['kept']:,}",
+            ]
+        )
+    allst = stats.get("all", {})
+    ok, fail = allst.get("succeeded", 0), allst.get("failed", 0)
+    cap = c.get("max_span_fraction", tf.max_span_fraction)
+    return [
+        "## How `bipia_textfooler` was built",
+        "",
+        "Adversarial variants of `bipia` test samples: TextFooler swaps words for synonyms until "
+        "the victim changes its prediction. An attacked sample is made to look clean, a clean "
+        "sample is made to look like an injection.",
+        "",
+        f"- **Victim:** [{name}](https://huggingface.co/{name}) at revision `{rev}`, on CPU, "
+        f"licence: {info.get('victim_license') or 'see its model card'}. Input: the document "
+        f"only. Documents longer than {tf.window} tokens use a sliding window ({tf.window} "
+        f"tokens, stride {tf.stride}); the score is the maximum injection probability over the "
+        "windows.",
+        "- **Attack:** TextAttack's TextFooler recipe (MIT). Only words inside the inserted text "
+        "may change: the attack for attacked samples, the benign text for clean ones. For code, "
+        "only the introductory sentence changes and the whole code block is protected. Emails, "
+        "URLs, identifiers, inline code, numbers and named entities are protected "
+        "(`protected_tokens`).",
+        "- **Only variants that fooled the victim are kept.** A variant is also checked by "
+        "rules (only word swaps, caps, protected tokens unchanged, nothing else in the document "
+        "changed) and by an LLM judge: an attacked variant must still be judged an injection, "
+        "a clean one must still be judged clean. The judge never writes text.",
+        f"- **Sizes:** classes are equal in every scenario; target {tf.targets} kept variants "
+        "per class and scenario.",
+        "",
+        "### Constraint values",
+        "",
+        _table(
+            ["setting", "value"],
+            [
+                ["recipe", "TextAttack `TextFoolerJin2019`"],
+                ["synonym candidates per word", c.get("max_candidates")],
+                ["word-embedding cosine similarity", f">= {c.get('min_cos_sim')}"],
+                [
+                    "sentence similarity (Universal Sentence Encoder, angular)",
+                    f">= {c.get('use_threshold')}, window {c.get('use_window')}",
+                ],
+                ["maximum fraction of words changed", f"{cap:.0%} of the inserted text"],
+                ["search / goal", f"{c.get('search')} / {c.get('goal')}"],
+                ["window rule", f"{tf.window} tokens, stride {tf.stride}, maximum score"],
+            ],
+        ),
+        "",
+        "### Attempts",
+        "",
+        _table(
+            [
+                "scenario",
+                "class",
+                "attempted",
+                "skipped (victim already wrong)",
+                "fooled the victim",
+                "failed",
+                "kept",
+            ],
+            rows,
+        ),
+        "",
+        f"Attack success rate against the victim: {_pct(ok, ok + fail)} (fooled / (fooled + "
+        "failed)). Variants that fooled the victim but failed the rules or the judge are not "
+        "kept, so *fooled* can exceed *kept*.",
+        "",
+    ]
+
+
 def build_card(
     cfg: Config,
     configs: list[str],
     reports: dict[str, dict[str, Any]],
     stats: dict[str, Any],
-    tag: str,
+    version: str,
 ) -> str:
     """The dataset card (README.md). Every number comes from the reports, config or files."""
     p1, p3, p4, p5 = reports["p1"], reports["p3"], reports["p4"], reports["p5"]
@@ -217,6 +583,7 @@ def build_card(
     test_tables = p4["p4_bipia"]["by_split"]["test"]["scenario"]["table"]
     pairs, matched = p4.get("pairs", 0), p4.get("length_matched", 0)
     rows_per_doc = reports.get("rows_per_doc", {})
+    tag = version
 
     out: list[str] = [_front_matter(cfg, configs)]
     out += [
@@ -234,7 +601,7 @@ def build_card(
         + (
             " Not yet included: "
             + ", ".join(f"`{c}`" for c in missing)
-            + " (TextFooler variants, built in steps P6-P9 and added in the final version)."
+            + " (TextFooler variants, added in v1)."
             if missing
             else ""
         ),
@@ -368,6 +735,7 @@ def build_card(
                     "n/a (judge only)",
                     "`bipia`: judging the benign texts (no text of the judge is in the data)",
                 ],
+                *(_textfooler_sources(reports) if "bipia_textfooler" in configs else []),
             ],
         ),
         "",
@@ -404,12 +772,14 @@ def build_card(
             "Each text passes four filters: shape, forbidden content (instructions, "
             "attack-like wording, network or file code), near-duplicates, and an LLM judge "
             f"(Mistral Medium). {p3['total']:,} texts were kept out of "
-            f"{p3.get('generated', 0):,} generated.",
+            f"{p3.get('generated', 0):,} generated. {cfg.p3.hard_negatives.share:.0%} of "
+            "every pool is then replaced by hard negatives (see *Hard negatives*).",
             f"4. **Negatives (P4, label 0).** Each positive gets one pool text of its own "
             "document and position, inserted with the same function: least used text first, "
             f"then within {cfg.p4.length_window['text']:.0%} of the attack's length "
-            f"({cfg.p4.length_window['code']:.0%} for code), then the closest length. No "
-            "negative row appears twice.",
+            f"({cfg.p4.length_window['code']:.0%} for code), then the fewest over-represented "
+            "benign words, then the closest length. No negative row appears twice. The "
+            "negative's `benign_span` is where its text sits in `document`.",
             "",
             "### P3 generation settings",
             "",
@@ -462,7 +832,7 @@ def build_card(
         ]
         if f_rows:
             out += [
-                "### P3 rejection rate per filter",
+                "### P3 rejection rate per filter (original texts)",
                 "",
                 _table(
                     ["filter", "texts checked", "rejected", "rejection rate"],
@@ -488,7 +858,7 @@ def build_card(
                 "",
             ]
         out += [
-            "### P3 prompts",
+            "### P3 prompts (original texts)",
             "",
             "Placeholders in braces are filled per document and position.",
             "",
@@ -507,6 +877,9 @@ def build_card(
                 if role in p:
                     out += [f"**{role}**", "", "```text", str(p[role]).rstrip(), "```", ""]
             out += ["</details>", ""]
+
+    if "bipia" in configs:
+        out += _hard_negative_section(cfg, reports, prompts)
 
     # Construction: nemotron
     if "nemotron" in configs:
@@ -536,6 +909,10 @@ def build_card(
             "",
         ]
 
+    if "bipia_textfooler" in configs:
+        out += _textfooler_section(cfg, reports)
+    out += _p7_section(cfg, reports, version)
+
     # Limits
     out += ["## Known limits", ""]
     if "bipia" in configs:
@@ -560,6 +937,7 @@ def build_card(
             "in another language). Report test metrics per `attack_group`, with and without it.",
             f"- **Length matching:** {_pct(matched, pairs)} of pairs are within the length "
             "window; the rest (mostly long test attacks) use the closest-length pool text.",
+            *_hard_negative_limits(reports),
             "- **No extra classifier label check** was run on the benign texts "
             "(`label_checked = false`); they were checked by the filters and the judge.",
         ]
@@ -567,7 +945,15 @@ def build_card(
         out += [
             "- **Nemotron positives are only attacks that succeeded against one defender** "
             "in NVIDIA's release, so they are not a sample of all possible attacks. `nemotron` "
-            "is a test set only.",
+            "is a test set only. In every pair the positive is longer than the negative (the "
+            "injection is cut out of it), so document length separates the two classes there: "
+            "do not read length-sensitive results on `nemotron` as detection skill.",
+        ]
+    if "bipia_textfooler" in configs:
+        out += [
+            "- **`bipia_textfooler` keeps only variants that fooled ProtectAI.** It measures "
+            "robustness to one attack against one victim, not the rate at which a guard is "
+            "fooled in general.",
         ]
     out.append("")
 
@@ -584,7 +970,7 @@ def build_card(
         "<https://creativecommons.org/licenses/by/4.0/>. Credit: NVIDIA. Changes: see *How "
         "`nemotron` was built*.",
         "- **Benign texts** in `bipia` negatives were generated with Mistral Small (Apache 2.0).",
-        "- **TextAttack** (MIT) will be used for the TextFooler config (not in this version).",
+        *_textfooler_licences(reports, "bipia_textfooler" in configs),
         "",
     ]
 
@@ -607,12 +993,13 @@ def rows_per_doc(cfg: Config) -> dict[str, dict[str, int]]:
     return out
 
 
-def stage(cfg: Config, configs: list[str], card: str, out_dir: Path) -> list[Path]:
-    """Copy the parquet files and write README.md into a fresh staging folder."""
+def stage(cfg: Config, version: str, card: str, out_dir: Path) -> list[Path]:
+    """Copy the parquet files this version adds, and write README.md, into a fresh staging
+    folder. v1 stages only `bipia_textfooler` (+ the card): v0 files are never uploaded again."""
     if out_dir.exists():
         shutil.rmtree(out_dir)
     files: list[Path] = []
-    for config in configs:
+    for config in new_configs(version):
         for split in SPLITS[config]:
             dst = out_dir / config / f"{split}.parquet"
             dst.parent.mkdir(parents=True, exist_ok=True)
@@ -653,8 +1040,8 @@ def scan_secrets(files: list[Path], secrets: list[bytes] | None = None) -> dict[
 # ---------------------------------------------------------------- push and verify
 
 
-def push(cfg: Config, out_dir: Path, tag: str, api: Any = None) -> dict[str, Any]:
-    """Upload the staged folder to the private repo and tag the commit."""
+def push(cfg: Config, out_dir: Path, version: str, api: Any = None) -> dict[str, Any]:
+    """Upload the staged folder to the private repo and tag the commit with the version."""
     if api is None:
         from huggingface_hub import HfApi
 
@@ -663,19 +1050,20 @@ def push(cfg: Config, out_dir: Path, tag: str, api: Any = None) -> dict[str, Any
     info = api.repo_info(repo, repo_type="dataset")
     if not getattr(info, "private", False):
         raise RuntimeError(f"{repo} is not private: refusing to push.")
-    refs = api.list_repo_refs(repo, repo_type="dataset")
-    if any(t.name == tag for t in getattr(refs, "tags", [])):
-        raise RuntimeError(f"tag {tag!r} already exists on {repo}: choose a new tag.")
+    tags = {t.name for t in getattr(api.list_repo_refs(repo, repo_type="dataset"), "tags", [])}
+    if version in tags:
+        raise RuntimeError(f"tag {version!r} already exists on {repo}: a version is pushed once.")
+    if version != "v0" and "v0" not in tags:
+        raise RuntimeError(f"{version} adds to v0, but tag 'v0' does not exist on {repo}.")
     commit = api.upload_folder(
         repo_id=repo,
         repo_type="dataset",
         folder_path=str(out_dir),
-        commit_message=f"{tag}: "
-        + ", ".join(sorted(p.name for p in out_dir.iterdir() if p.is_dir())),
+        commit_message=f"{version}: add " + ", ".join(new_configs(version)),
     )
     oid = getattr(commit, "oid", None)
-    api.create_tag(repo, repo_type="dataset", tag=tag, revision=oid, tag_message=f"{tag}")
-    return {"commit": oid, "commit_url": getattr(commit, "commit_url", None), "tag": tag}
+    api.create_tag(repo, repo_type="dataset", tag=version, revision=oid, tag_message=version)
+    return {"commit": oid, "commit_url": getattr(commit, "commit_url", None), "tag": version}
 
 
 VERIFY_SCRIPT = """
@@ -690,35 +1078,38 @@ print("P10_VERIFY " + json.dumps(out))
 """
 
 
-def verify(cfg: Config, tag: str, configs: list[str]) -> dict[str, Any]:
-    """Load every config/split from the Hub in a clean uv environment; compare with the reports."""
+def compare_files(dir_a: Path, dir_b: Path, rel_paths: list[str]) -> list[str]:
+    """Relative paths that are missing or whose sha256 differs between two folders."""
+    bad = []
+    for rel in rel_paths:
+        a, b = dir_a / rel, dir_b / rel
+        if not a.is_file() or not b.is_file():
+            bad.append(f"{rel}: missing in {'first' if not a.is_file() else 'second'}")
+        elif (
+            hashlib.sha256(a.read_bytes()).hexdigest() != hashlib.sha256(b.read_bytes()).hexdigest()
+        ):
+            bad.append(f"{rel}: content differs")
+    return bad
 
+
+def verify(cfg: Config, version: str) -> dict[str, Any]:
+    """Load every config/split at the version's tag from the Hub in a clean uv environment and
+    compare with the reports. From v1 on, also load v0 again and check that it is unchanged."""
     token = require_secret("HF_TOKEN")
-    reports = load_reports(cfg)
-    pairs = [[c, s] for c in configs for s in SPLITS[c]]
+    reports = load_reports(cfg, version)
     env = {**os.environ, "HF_TOKEN": token, "HF_HUB_DISABLE_PROGRESS_BARS": "1"}
     # A fresh, SHORT cache folder: nothing is read from earlier downloads, and the `datasets`
     # lock-file name embeds the cache path (Windows fails above 260 characters).
     work = Path(tempfile.mkdtemp(prefix="p10v"))
     try:
-        return _verify_in(cfg, tag, configs, token, reports, pairs, env, work)
+        return _verify_in(cfg, version, token, reports, env, work)
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
 
-def _verify_in(
-    cfg: Config,
-    tag: str,
-    configs: list[str],
-    token: str,
-    reports: dict[str, dict[str, Any]],
-    pairs: list[list[str]],
-    env: dict[str, str],
-    work: Path,
-) -> dict[str, Any]:
-    from huggingface_hub import HfApi
-
-    env["HF_HOME"] = str(work / "c")
+def _load_at(cfg: Config, rev: str, configs: list[str], token: str, env: dict, work: Path) -> dict:
+    env = {**env, "HF_HOME": str(work / f"c{rev}")}
+    pairs = [[c, s] for c in configs for s in SPLITS[c]]
     proc = subprocess.run(
         [
             "uv",
@@ -731,7 +1122,7 @@ def _verify_in(
             "-c",
             VERIFY_SCRIPT,
             cfg.dataset.repo_id,
-            tag,
+            rev,
             json.dumps(pairs),
         ],
         env=env,
@@ -741,38 +1132,75 @@ def _verify_in(
     )
     if proc.returncode != 0:
         tail = proc.stderr.replace(token, "***")[-3000:]
-        raise RuntimeError(f"load_dataset failed:\n{tail}")
+        raise RuntimeError(f"load_dataset failed at revision {rev}:\n{tail}")
     line = next(ln for ln in proc.stdout.splitlines() if ln.startswith("P10_VERIFY "))
-    loaded = json.loads(line.removeprefix("P10_VERIFY "))
+    return json.loads(line.removeprefix("P10_VERIFY "))
 
-    errors: list[str] = []
+
+def _count_errors(loaded: dict, configs: list[str], reports: dict, rev: str) -> list[str]:
+    errors = []
     for c in configs:
         exp = expected_rows(reports, c)
         for s in SPLITS[c]:
             got = loaded.get(f"{c}/{s}", {})
             if got.get("rows") != exp.get(s):
-                errors.append(f"{c}/{s}: loaded {got.get('rows')} rows, reports say {exp.get(s)}")
+                errors.append(
+                    f"{rev} {c}/{s}: loaded {got.get('rows')} rows, reports say {exp.get(s)}"
+                )
             if tuple(got.get("columns", ())) != COLUMNS:
-                errors.append(f"{c}/{s}: loaded columns differ from the schema")
+                errors.append(f"{rev} {c}/{s}: loaded columns differ from the schema")
+    return errors
+
+
+def _verify_in(
+    cfg: Config,
+    version: str,
+    token: str,
+    reports: dict[str, dict[str, Any]],
+    env: dict[str, str],
+    work: Path,
+) -> dict[str, Any]:
+    from huggingface_hub import HfApi
+
+    configs = configs_of(version)
+    loaded = _load_at(cfg, version, configs, token, env, work)
+    errors = _count_errors(loaded, configs, reports, version)
 
     # Secret check on the remote files (README and parquet) at the tag.
     api = HfApi(token=token)
-    remote_dir = work / "f"
-    local = api.snapshot_download(
-        cfg.dataset.repo_id, repo_type="dataset", revision=tag, local_dir=str(remote_dir)
+    local = Path(
+        api.snapshot_download(
+            cfg.dataset.repo_id, repo_type="dataset", revision=version, local_dir=str(work / "f")
+        )
     )
-    remote_files = [p for p in Path(local).rglob("*") if p.is_file() and ".cache" not in p.parts]
+    remote_files = [p for p in local.rglob("*") if p.is_file() and ".cache" not in p.parts]
     hits = scan_secrets(remote_files, [token.encode(), *_known_secrets()])
     if hits:
         errors.append(f"secret-looking content in remote files: {sorted(hits)}")
     info = api.repo_info(cfg.dataset.repo_id, repo_type="dataset")
     if not info.private:
         errors.append("the repository is not private")
+
+    v0_unchanged = None
+    if version != "v0":
+        v0_configs = configs_of("v0")
+        loaded_v0 = _load_at(cfg, "v0", v0_configs, token, env, work)
+        errors += _count_errors(loaded_v0, v0_configs, load_reports(cfg, "v0"), "v0")
+        local0 = Path(
+            api.snapshot_download(
+                cfg.dataset.repo_id, repo_type="dataset", revision="v0", local_dir=str(work / "f0")
+            )
+        )
+        rels = [f"{c}/{s}.parquet" for c in v0_configs for s in SPLITS[c]]
+        diff = compare_files(local0, local, rels)
+        errors += [f"v0 file changed in {version}: {d}" for d in diff]
+        v0_unchanged = {"loaded": loaded_v0, "files_compared": rels, "differences": diff}
     return {
-        "tag": tag,
+        "tag": version,
         "loaded": loaded,
         "remote_files": sorted(str(p.relative_to(local)).replace("\\", "/") for p in remote_files),
         "private": bool(info.private),
+        "v0_unchanged": v0_unchanged,
         "errors": errors,
     }
 
@@ -780,7 +1208,8 @@ def _verify_in(
 # ---------------------------------------------------------------- report
 
 
-CARD_COPY = "p10_dataset_card.md"
+def card_copy_name(version: str) -> str:
+    return f"p10_dataset_card_{version}.md"
 
 
 def _rel(path: str | Path) -> str:
@@ -791,26 +1220,36 @@ def _rel(path: str | Path) -> str:
         return Path(path).as_posix()
 
 
-def _report(cfg: Config, payload: dict[str, Any]) -> Path:
-    prev_path = report_path(cfg, f"{REPORT_NAME}.json")
+def _report(cfg: Config, version: str, payload: dict[str, Any]) -> Path:
+    name = f"{REPORT_NAME}_{version}"
+    prev_path = report_path(cfg, f"{name}.json")
     prev = json.loads(prev_path.read_text(encoding="utf-8")) if prev_path.is_file() else {}
     # Keep earlier push / verify results when a later dry-run or verify rewrites the report.
     data = prev | payload
     prev_path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
-    lines = [f"# Report: {REPORT_NAME}", ""]
+    gate = data.get("gate", {})
+    lines = [f"# Report: {name}", ""]
     lines += [
         "## Run",
         "",
         f"- Repository: `{cfg.dataset.repo_id}` (private: {cfg.dataset.private})",
-        f"- Tag: `{data.get('tag')}`",
-        f"- Configs: {', '.join(f'`{c}`' for c in data.get('configs', []))}",
+        f"- Version / tag: `{version}`",
+        f"- Configs in this version: {', '.join(f'`{c}`' for c in data.get('configs', []))}",
+        f"- Uploaded by this push: {', '.join(f'`{c}`' for c in data.get('uploads', []))} "
+        "and the card",
         f"- Last action: {data.get('action')}",
+        "",
+        "## P7 gate",
+        "",
+        f"- P7 {version}: **{gate.get('status', 'n/a')}**"
+        + (f" ({gate['reason']})" if gate.get("reason") else "")
+        + (". A push is allowed." if gate.get("ok") else ". A push is blocked."),
         "",
         "## Preflight",
         "",
-        "Step reports P1-P5 have no failed checks; every file has the 29 schema columns in "
-        "order, the reported row count, classes 1:1, one split and source value, and unique "
+        f"Step reports have no failed checks; every file has the {len(COLUMNS)} schema columns "
+        "in order, the reported row count, classes 1:1, one split and source value, and unique "
         "`sample_id`s.",
         "",
         _table(
@@ -831,7 +1270,7 @@ def _report(cfg: Config, payload: dict[str, Any]) -> Path:
         "",
         f"`README.md`, sha256 `{data.get('card_sha256', '')[:16]}…`, staged in "
         f"`{_rel(data.get('stage_dir', ''))}`; a copy is kept in "
-        f"`reports/p10/{CARD_COPY}`.",
+        f"`reports/p10/{card_copy_name(version)}`.",
         "",
         "## Secret scan",
         "",
@@ -857,7 +1296,7 @@ def _report(cfg: Config, payload: dict[str, Any]) -> Path:
     if data.get("verify"):
         v = data["verify"]
         lines += [
-            "## Verify (clean environment, `load_dataset`)",
+            f"## Verify (clean environment, `load_dataset` at revision `{version}`)",
             "",
             _table(
                 ["config/split", "rows loaded"],
@@ -868,6 +1307,17 @@ def _report(cfg: Config, payload: dict[str, Any]) -> Path:
             f"- Remote files: {', '.join(f'`{f}`' for f in v.get('remote_files', []))}",
             "- Secret scan of the remote files: "
             + ("none found" if not any("secret" in e for e in v.get("errors", [])) else "FOUND"),
+        ]
+        u = v.get("v0_unchanged")
+        if u:
+            lines += [
+                "- v0 loaded again at revision `v0`: "
+                + ", ".join(f"{k} {x['rows']:,}" for k, x in u["loaded"].items()),
+                f"- v0 files compared between `v0` and `{version}` (sha256): "
+                f"{len(u['files_compared'])} files, "
+                + ("**unchanged**" if not u["differences"] else f"**DIFFER**: {u['differences']}"),
+            ]
+        lines += [
             "- Result: "
             + ("**PASSED**" if not v.get("errors") else "**FAILED**: " + "; ".join(v["errors"])),
             "",
@@ -875,18 +1325,16 @@ def _report(cfg: Config, payload: dict[str, Any]) -> Path:
     lines += [
         "## Deviations from the brief",
         "",
-        "- **Early, partial push (v0.1, team decision 2026-11-23):** the brief pushes once, "
-        "after P7 and P8. This version has `bipia` and `nemotron` so that training can start; "
-        "`bipia_textfooler` follows in the final push (v1.0).",
         "- **Repository name:** `SAIL-Reply/ipi-twins` instead of `<org>/ipi-shieldstral` "
         "(team decision).",
-        "- **Step 1:** the P7 and P8 reports do not exist yet, so the preflight reads the P1-P5 "
-        "reports and stops on any failed check.",
         "- **Verify:** the clean environment is `uv run --isolated --no-project --with datasets` "
         "with a fresh Hugging Face cache.",
+        "- **Earlier push:** an early `v0.1` (29 columns, original pool) was pushed before the "
+        "version scheme existed; its record is in `reports/archive/p10/v0.1/`. `v0` replaces "
+        "it in `main`; the `v0.1` tag keeps it reachable.",
         "",
     ]
-    path = report_path(cfg, f"{REPORT_NAME}.md")
+    path = report_path(cfg, f"{name}.md")
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
     return path
 
@@ -897,47 +1345,50 @@ def _report(cfg: Config, payload: dict[str, Any]) -> Path:
 def run(
     cfg: Config | None = None,
     *,
+    version: str = "v0",
     do_push: bool = False,
-    tag: str = "v0.1",
-    configs: list[str] | None = None,
     api: Any = None,
 ) -> dict[str, Any]:
     cfg = cfg or load_config()
-    configs = configs or list(cfg.dataset.push_configs)
-    reports = load_reports(cfg)
-    stats = preflight(cfg, configs, reports)
-    reports["rows_per_doc"] = rows_per_doc(cfg) if "bipia" in configs else {}
-    card = build_card(cfg, configs, reports, stats, tag)
+    configs = configs_of(version)
+    reports = load_reports(cfg, version)
+    stats = preflight(cfg, configs, reports)  # all configs of the version, v0 files included
+    reports["rows_per_doc"] = rows_per_doc(cfg)
+    reports["hn_share"] = hn_share(cfg)
+    card = build_card(cfg, configs, reports, stats, version)
     out_dir = stage_dir(cfg)
-    files = stage(cfg, configs, card, out_dir)
+    files = stage(cfg, version, card, out_dir)
     hits = scan_secrets(files)
-    report_path(cfg, CARD_COPY).write_text(card, encoding="utf-8", newline="\n")
+    report_path(cfg, card_copy_name(version)).write_text(card, encoding="utf-8", newline="\n")
+    gate = p7_gate(cfg, version, configs)
     payload: dict[str, Any] = {
         "action": "push" if do_push else "dry-run",
-        "tag": tag,
+        "version": version,
         "configs": configs,
+        "uploads": new_configs(version),
         "files": stats,
+        "gate": gate,
         "card_sha256": hashlib.sha256(card.encode()).hexdigest(),
         "stage_dir": _rel(out_dir),
         "secrets_staged": sorted(hits),
     }
     if hits:
-        _report(cfg, payload)
+        _report(cfg, version, payload)
         raise SecretFoundError(f"secret-looking content in staged files: {sorted(hits)}")
     if do_push:
-        payload["push"] = push(cfg, out_dir, tag, api=api)
+        if not gate["ok"]:
+            _report(cfg, version, payload)
+            raise PushBlockedError(f"push blocked: {gate['reason']}")
+        payload["push"] = push(cfg, out_dir, version, api=api)
         payload["verify"] = None
-    report = _report(cfg, payload)
+    report = _report(cfg, version, payload)
     return {**payload, "report": report, "card": out_dir / "README.md"}
 
 
-def run_verify(
-    cfg: Config | None = None, tag: str = "v0.1", configs: list[str] | None = None
-) -> dict[str, Any]:
+def run_verify(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
     cfg = cfg or load_config()
-    configs = configs or list(cfg.dataset.push_configs)
-    result = verify(cfg, tag, configs)
-    report = _report(cfg, {"action": "verify", "verify": result})
+    result = verify(cfg, version)
+    report = _report(cfg, version, {"action": "verify", "verify": result})
     if result["errors"]:
         raise CountMismatchError("P10 verify failed:\n  " + "\n  ".join(result["errors"]))
     return {**result, "report": report}
