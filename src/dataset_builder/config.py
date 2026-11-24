@@ -26,6 +26,9 @@ class DatasetCfg(_Strict):
     repo_id: str
     private: bool = True
     configs: list[str]
+    pretty_name: str = "ipi-twins"
+    license: str = "cc-by-sa-4.0"
+    push_configs: list[str] = []  # configs pushed by P10 (v0.1: bipia, nemotron)
 
 
 class PathsCfg(_Strict):
@@ -61,6 +64,18 @@ class BenignCheckCfg(_Strict):
 
 class TextFoolerCfg(_Strict):
     victim_model: str
+    victim_revision: str | None = None  # pinned at the first P6 run
+    window: int = 512  # tokens per window (incl. special tokens); score = max over windows
+    stride: int = 256
+    batch_size: int = 16  # windows per forward pass
+    # TextFooler recipe values (Jin et al. 2019, TextAttack); checked against the recipe at run.
+    max_candidates: int = 50
+    min_cos_sim: float = 0.5
+    use_threshold: float = 0.840845057
+    use_window: int = 15
+    max_span_fraction: float = 0.30  # user decision: at most 30% of the span's words changed
+    targets: dict[str, int] = {}  # kept variants per class, per scenario
+    pilot_size: int = 20
 
 
 class NemotronCfg(_Strict):
@@ -99,6 +114,24 @@ class P3ExtensionCfg(_Strict):
     max_rounds: int = 8
 
 
+class P3HardNegCfg(_Strict):
+    """Option B (team decision, 2026-11-24): replace part of every pool with harmless texts that
+    sound like instructions to the human reader, so instruction wording stops being a shortcut."""
+
+    share: float = 0.4  # share of each pool replaced (8 of 20, 10 of 25)
+    prompt_version: str = "hn-v1"
+    judge_prompt_version: str = "judge-v4"
+    judge_batch_prompt_version: str = "judge-batch-v2"
+    max_rounds: int = 8
+    # Texts with the most of these words are replaced first (P7 v0 diagnostic 4).
+    replace_words: list[str] = []
+    # Filter profile for the new texts (the existing texts keep the brief's filters).
+    assistant_words: list[str] = []
+    assistant_words_text_only: list[str] = []
+    code_forbidden_patterns: list[str] = []
+    allowed_url_hosts: list[str] = []
+
+
 class P3Cfg(_Strict):
     prompts: Path
     generator: P3GeneratorCfg
@@ -128,11 +161,33 @@ class P3Cfg(_Strict):
     code_intro_patterns: list[str]
     code_forbidden_patterns: list[str]
     prices: dict[str, dict[str, float]]  # model prefix -> {input, output} $ per 1M tokens
+    allowed_url_hosts: list[str] = []  # URLs on these hosts pass the URL filter (hard negatives)
+    hard_negatives: P3HardNegCfg = P3HardNegCfg()
 
 
 class P4Cfg(_Strict):
     # A pool text is "length-matched" if |len(text) - len(attack)| <= window x len(attack).
     length_window: dict[Literal["text", "code"], float]
+    # Option (a) after P7 v0 (team decision, 2026-11-24): among the least-used texts within the
+    # length window, prefer the one with the fewest of these over-represented benign words.
+    avoid_words: list[str] = []
+
+
+class P7TfidfCfg(_Strict):
+    ngram: tuple[int, int] = (1, 2)
+    min_df: int = 5
+    max_features: int = 50_000
+    C: float = 1.0
+
+
+class P7Cfg(_Strict):
+    # Stop rule: the team's limits. A baseline above them blocks the push; P7 never edits them.
+    length_auc_stop: float = 0.70
+    tfidf_auc_stop: float = 0.95
+    fpr: float = 0.01  # recall is reported at this false-positive rate
+    # Position shares: allowed distance from one third, per split.
+    position_tolerance: dict[str, float] = {"test": 0.02, "train": 0.05, "validation": 0.05}
+    tfidf: P7TfidfCfg = P7TfidfCfg()
 
 
 class Config(_Strict):
@@ -147,6 +202,7 @@ class Config(_Strict):
     nemotron: NemotronCfg
     p3: P3Cfg
     p4: P4Cfg
+    p7: P7Cfg = P7Cfg()
     expected_counts: dict[str, dict[str, Any]] = {}
 
 

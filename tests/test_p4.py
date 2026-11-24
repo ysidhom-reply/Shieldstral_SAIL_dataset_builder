@@ -35,7 +35,7 @@ def _pool(docs, lengths=None):
                         "position": pos,
                         "text": text,
                         "length": len(text),
-                        "shieldstral_checked": False,
+                        "label_checked": False,
                     }
                 )
     return out
@@ -94,6 +94,12 @@ def test_run_end_to_end(p4cfg):
                 assert pos[k] == neg[k], k
             assert neg["generation_method"] == "llm_benign_insertion" and neg["answer"] == "no"
             assert neg["benign_id"] and neg["attack_name"] is None
+            s, e = neg["benign_span"]  # [start, end) of the benign text (contract update)
+            assert s == neg["insert_index"] and pos["benign_span"] is None
+            assert (
+                neg["document"][:s] + neg["document"][e:]
+                == pos["document"][:s] + pos["document"][s + len(pos["injection_span"]) :]
+            )
             assert neg["sample_id"].removeprefix("bipia-neg-") == pos["sample_id"].removeprefix(
                 "bipia-pos-"
             )
@@ -131,3 +137,19 @@ def test_attack_text_in_pool_stops(p4cfg):
     with pytest.raises(p4.P4CheckError, match="BIPIA attack text"):
         p4.run(p4cfg)
     assert not p4.out_path(p4cfg, "test").exists()
+
+
+def test_pick_prefers_fewer_avoided_words_within_the_window():
+    cands = [
+        {"benign_id": "a", "length": 50, "text": "See the total column in the table."},
+        {"benign_id": "b", "length": 56, "text": "Figures were collected over two seasons."},
+        {"benign_id": "c", "length": 51, "text": "Refer to the note for the data source."},
+    ]
+    avoid = frozenset({"see", "total", "column", "table", "refer", "note", "data"})
+    chosen, ok = p4.pick(52, cands, Counter(), 0.3, avoid)
+    assert chosen["benign_id"] == "b" and ok  # fewest avoided words, still in the window
+    far = {"benign_id": "d", "length": 200, "text": "Plain text."}
+    chosen, _ = p4.pick(52, [cands[0], far], Counter(), 0.3, avoid)
+    assert chosen["benign_id"] == "a"  # the length window comes first
+    chosen, _ = p4.pick(52, cands, Counter({"b": 1}), 0.3, avoid)
+    assert chosen["benign_id"] != "b"  # least used comes first

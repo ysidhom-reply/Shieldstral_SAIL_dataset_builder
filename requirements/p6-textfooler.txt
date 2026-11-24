@@ -1,0 +1,10 @@
+# P6 (TextFooler against ProtectAI) runs in its own isolated uv environment, because TextAttack
+# needs transformers<5, which needs huggingface-hub<1, while the project lock uses
+# huggingface-hub 2.x (P5, P10). Run:
+#   uv run --isolated --no-project --with-editable . --with-requirements requirements/p6-textfooler.txt dataset-builder p6-textfooler
+textattack==0.3.11
+flair>=0.15
+tensorflow>=2.16
+tensorflow-hub>=0.16
+tf-keras>=2.16
+setuptools<81                  # tensorflow-hub still imports pkg_resources

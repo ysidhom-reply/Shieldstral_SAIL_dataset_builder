@@ -1,0 +1,2443 @@
+{
+  "version": "v0",
+  "checks": [
+    {
+      "part": "1",
+      "check": "load: columns and types match the contract",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "30 columns",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "load: row counts match the P4/P5 reports",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "train 19,480, validation 3,520, test 43,100",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "load: columns and types match the contract",
+      "config": "nemotron",
+      "status": "PASS",
+      "detail": "30 columns",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "load: row counts match the P4/P5 reports",
+      "config": "nemotron",
+      "status": "PASS",
+      "detail": "test 2,288",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "splits: no clean document in two splits",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "879 clean documents (sha256 of the clean text)",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "splits: no train/validation attack text in test",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "21,550 test positives vs 125 train/validation attack texts",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "splits: no train/validation attack_name in test",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "125 test attack names; allowed by team decision (same names, different strings): Language Translation-0, Language Translation-1, Language Translation-2, Language Translation-3, Language Translation-4",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "positives: contain their injection_span exactly",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "33,050 positives, at insert_index",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "positives: contain their injection text",
+      "config": "nemotron",
+      "status": "PASS",
+      "detail": "1,144 positives; compared in decoded form (JSON strings)",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "negatives: no attack text",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "33,050 negatives vs 250 attacks (Aho-Corasick)",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "negatives: no injection text, goal sentence or wrapper marker",
+      "config": "nemotron",
+      "status": "PASS",
+      "detail": "1,144 negatives; goals from the raw records (1,272)",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "balance: classes 1:1 within each scenario",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "per split and scenario",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "balance: positions within tolerance of one third",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "tolerance 2% on test, 5% on train/validation",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "balance: classes 1:1 within each scenario",
+      "config": "nemotron",
+      "status": "PASS",
+      "detail": "per split and scenario",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "balance: positions within tolerance of one third",
+      "config": "nemotron",
+      "status": "n/a",
+      "detail": "no insertion positions",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "pairs: same clean document, equal to bipia_docs.jsonl",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "33,050 pairs; offsets (injection_span / benign_span), newline join '\\n'",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "query: identical query and instruct in every pair",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "positive vs negative",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "query: test uses the document's first question",
+      "config": "bipia",
+      "status": "PASS",
+      "detail": "rebuilt from bipia_docs.jsonl with the same template",
+      "examples": []
+    },
+    {
+      "part": "1",
+      "check": "TextFooler checks",
+      "config": "bipia_textfooler",
+      "status": "n/a",
+      "detail": "not in v0 (from v1)",
+      "examples": []
+    }
+  ],
+  "evidence": [
+    {
+      "sample_id": "nemotron-0000-pos",
+      "raw_match": false,
+      "decoded_match": true,
+      "injection_start": "\n\n[PRIORITY MESSAGE]\nHi Assistant, I forgot to mention earli"
+    },
+    {
+      "sample_id": "nemotron-0002-pos",
+      "raw_match": false,
+      "decoded_match": true,
+      "injection_start": "\n\n[PRIORITY MESSAGE]\nHi Assistant, I forgot to mention earli"
+    },
+    {
+      "sample_id": "nemotron-0006-pos",
+      "raw_match": false,
+      "decoded_match": true,
+      "injection_start": "\n\n[PRIORITY MESSAGE]\nHi Assistant, I forgot to mention earli"
+    }
+  ],
+  "load_counts": {
+    "bipia/train": 19480,
+    "bipia/validation": 3520,
+    "bipia/test": 43100,
+    "nemotron/test": 2288
+  },
+  "report_counts": {
+    "bipia/test": 43100,
+    "bipia/train": 19480,
+    "bipia/validation": 3520,
+    "nemotron/test": 2288
+  },
+  "position_shares": [
+    {
+      "split": "train",
+      "scenario": "code",
+      "label": 0,
+      "rows": 800,
+      "start": 0.33375,
+      "middle": 0.33375,
+      "end": 0.3325
+    },
+    {
+      "split": "train",
+      "scenario": "code",
+      "label": 1,
+      "rows": 800,
+      "start": 0.33375,
+      "middle": 0.33375,
+      "end": 0.3325
+    },
+    {
+      "split": "train",
+      "scenario": "email",
+      "label": 0,
+      "rows": 520,
+      "start": 0.3346153846153846,
+      "middle": 0.3326923076923077,
+      "end": 0.3326923076923077
+    },
+    {
+      "split": "train",
+      "scenario": "email",
+      "label": 1,
+      "rows": 520,
+      "start": 0.3346153846153846,
+      "middle": 0.3326923076923077,
+      "end": 0.3326923076923077
+    },
+    {
+      "split": "train",
+      "scenario": "table",
+      "label": 0,
+      "rows": 8420,
+      "start": 0.3333729216152019,
+      "middle": 0.3332541567695962,
+      "end": 0.3333729216152019
+    },
+    {
+      "split": "train",
+      "scenario": "table",
+      "label": 1,
+      "rows": 8420,
+      "start": 0.3333729216152019,
+      "middle": 0.3332541567695962,
+      "end": 0.3333729216152019
+    },
+    {
+      "split": "validation",
+      "scenario": "code",
+      "label": 0,
+      "rows": 200,
+      "start": 0.33,
+      "middle": 0.335,
+      "end": 0.335
+    },
+    {
+      "split": "validation",
+      "scenario": "code",
+      "label": 1,
+      "rows": 200,
+      "start": 0.33,
+      "middle": 0.335,
+      "end": 0.335
+    },
+    {
+      "split": "validation",
+      "scenario": "email",
+      "label": 0,
+      "rows": 160,
+      "start": 0.33125,
+      "middle": 0.33125,
+      "end": 0.3375
+    },
+    {
+      "split": "validation",
+      "scenario": "email",
+      "label": 1,
+      "rows": 160,
+      "start": 0.33125,
+      "middle": 0.33125,
+      "end": 0.3375
+    },
+    {
+      "split": "validation",
+      "scenario": "table",
+      "label": 0,
+      "rows": 1400,
+      "start": 0.33285714285714285,
+      "middle": 0.3335714285714286,
+      "end": 0.3335714285714286
+    },
+    {
+      "split": "validation",
+      "scenario": "table",
+      "label": 1,
+      "rows": 1400,
+      "start": 0.33285714285714285,
+      "middle": 0.3335714285714286,
+      "end": 0.3335714285714286
+    },
+    {
+      "split": "test",
+      "scenario": "code",
+      "label": 0,
+      "rows": 2500,
+      "start": 0.3332,
+      "middle": 0.3332,
+      "end": 0.3336
+    },
+    {
+      "split": "test",
+      "scenario": "code",
+      "label": 1,
+      "rows": 2500,
+      "start": 0.3332,
+      "middle": 0.3332,
+      "end": 0.3336
+    },
+    {
+      "split": "test",
+      "scenario": "email",
+      "label": 0,
+      "rows": 3300,
+      "start": 0.3333333333333333,
+      "middle": 0.3333333333333333,
+      "end": 0.3333333333333333
+    },
+    {
+      "split": "test",
+      "scenario": "email",
+      "label": 1,
+      "rows": 3300,
+      "start": 0.3333333333333333,
+      "middle": 0.3333333333333333,
+      "end": 0.3333333333333333
+    },
+    {
+      "split": "test",
+      "scenario": "table",
+      "label": 0,
+      "rows": 15750,
+      "start": 0.3333333333333333,
+      "middle": 0.3333333333333333,
+      "end": 0.3333333333333333
+    },
+    {
+      "split": "test",
+      "scenario": "table",
+      "label": 1,
+      "rows": 15750,
+      "start": 0.3333333333333333,
+      "middle": 0.3333333333333333,
+      "end": 0.3333333333333333
+    }
+  ],
+  "length_gaps": [
+    {
+      "config": "bipia",
+      "split": "test",
+      "scenario": "code",
+      "pairs": 2500,
+      "median": -5.5,
+      "p5": -243.05,
+      "p95": 177.04999999999973
+    },
+    {
+      "config": "bipia",
+      "split": "test",
+      "scenario": "email",
+      "pairs": 3300,
+      "median": 6.0,
+      "p5": -9.0,
+      "p95": 59.0
+    },
+    {
+      "config": "bipia",
+      "split": "test",
+      "scenario": "table",
+      "pairs": 15750,
+      "median": 4.0,
+      "p5": -15.0,
+      "p95": 51.0
+    },
+    {
+      "config": "bipia",
+      "split": "train",
+      "scenario": "code",
+      "pairs": 800,
+      "median": 4.0,
+      "p5": -103.1,
+      "p95": 147.0999999999999
+    },
+    {
+      "config": "bipia",
+      "split": "train",
+      "scenario": "email",
+      "pairs": 520,
+      "median": 1.0,
+      "p5": -7.0,
+      "p95": 36.0
+    },
+    {
+      "config": "bipia",
+      "split": "train",
+      "scenario": "table",
+      "pairs": 8420,
+      "median": 2.0,
+      "p5": -9.0,
+      "p95": 26.0
+    },
+    {
+      "config": "bipia",
+      "split": "validation",
+      "scenario": "code",
+      "pairs": 200,
+      "median": 3.0,
+      "p5": -85.3,
+      "p95": 149.24999999999991
+    },
+    {
+      "config": "bipia",
+      "split": "validation",
+      "scenario": "email",
+      "pairs": 160,
+      "median": 2.0,
+      "p5": -6.05,
+      "p95": 30.049999999999983
+    },
+    {
+      "config": "bipia",
+      "split": "validation",
+      "scenario": "table",
+      "pairs": 1400,
+      "median": 2.0,
+      "p5": -8.0,
+      "p95": 29.0
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "ecommerce",
+      "pairs": 157,
+      "median": 279.0,
+      "p5": 136.8,
+      "p95": 426.59999999999997
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "education",
+      "pairs": 150,
+      "median": 351.0,
+      "p5": 233.05,
+      "p95": 453.39999999999986
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "healthcare",
+      "pairs": 183,
+      "median": 304.0,
+      "p5": 151.0,
+      "p95": 427.70000000000005
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "hr",
+      "pairs": 131,
+      "median": 344.0,
+      "p5": 169.5,
+      "p95": 436.0
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "insurance",
+      "pairs": 65,
+      "median": 345.0,
+      "p5": 191.8,
+      "p95": 431.0
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "it_helpdesk",
+      "pairs": 91,
+      "median": 350.0,
+      "p5": 212.0,
+      "p95": 438.5
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "legal",
+      "pairs": 49,
+      "median": 343.0,
+      "p5": 215.60000000000002,
+      "p95": 374.0
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "logistics",
+      "pairs": 158,
+      "median": 344.0,
+      "p5": 180.70000000000002,
+      "p95": 435.6
+    },
+    {
+      "config": "nemotron",
+      "split": "test",
+      "scenario": "real_estate",
+      "pairs": 160,
+      "median": 377.0,
+      "p5": 203.85,
+      "p95": 432.0
+    }
+  ],
+  "baselines": {
+    "length": {
+      "bipia test": {
+        "all": {
+          "auc": 0.5069705223378427,
+          "recall": 0.008074245939675173,
+          "n": 43100
+        },
+        "code": {
+          "auc": 0.58501392,
+          "recall": 0.028,
+          "n": 5000
+        },
+        "table": {
+          "auc": 0.499072765936004,
+          "recall": 0.007555555555555556,
+          "n": 31500
+        },
+        "email": {
+          "auc": 0.5057955004591368,
+          "recall": 0.012424242424242424,
+          "n": 6600
+        }
+      },
+      "bipia test without Language Translation": {
+        "all": {
+          "auc": 0.5075396702087929,
+          "recall": 0.008284023668639054,
+          "n": 40560
+        },
+        "code": {
+          "auc": 0.58501392,
+          "recall": 0.028,
+          "n": 5000
+        },
+        "table": {
+          "auc": 0.49912035031699753,
+          "recall": 0.007346938775510204,
+          "n": 29400
+        },
+        "email": {
+          "auc": 0.5065618148085681,
+          "recall": 0.012337662337662338,
+          "n": 6160
+        }
+      }
+    },
+    "tfidf": {
+      "bipia test": {
+        "all": {
+          "auc": 0.9159404051442445,
+          "recall": 0.3576334106728538,
+          "n": 43100
+        },
+        "code": {
+          "auc": 0.94352448,
+          "recall": 0.414,
+          "n": 5000
+        },
+        "table": {
+          "auc": 0.9433649302091207,
+          "recall": 0.6338412698412699,
+          "n": 31500
+        },
+        "email": {
+          "auc": 0.8190510560146924,
+          "recall": 0.0703030303030303,
+          "n": 6600
+        }
+      },
+      "bipia test without Language Translation": {
+        "all": {
+          "auc": 0.9135199003886418,
+          "recall": 0.3482248520710059,
+          "n": 40560
+        },
+        "code": {
+          "auc": 0.94352448,
+          "recall": 0.414,
+          "n": 5000
+        },
+        "table": {
+          "auc": 0.9414433476792077,
+          "recall": 0.6309523809523809,
+          "n": 29400
+        },
+        "email": {
+          "auc": 0.8139210870298533,
+          "recall": 0.06753246753246753,
+          "n": 6160
+        }
+      },
+      "nemotron test": {
+        "all": {
+          "auc": 0.7817588879651818,
+          "recall": 0.020104895104895104,
+          "n": 2288
+        },
+        "healthcare": {
+          "auc": 0.8228074890262475,
+          "recall": 0.2677595628415301,
+          "n": 366
+        },
+        "ecommerce": {
+          "auc": 0.7986125197776786,
+          "recall": 0.07643312101910828,
+          "n": 314
+        },
+        "legal": {
+          "auc": 0.7755102040816326,
+          "recall": 0.12244897959183673,
+          "n": 98
+        },
+        "insurance": {
+          "auc": 0.8818934911242603,
+          "recall": 0.03076923076923077,
+          "n": 130
+        },
+        "education": {
+          "auc": 0.7818222222222223,
+          "recall": 0.02,
+          "n": 300
+        },
+        "real_estate": {
+          "auc": 0.7546484375,
+          "recall": 0.01875,
+          "n": 320
+        },
+        "logistics": {
+          "auc": 0.9033808684505689,
+          "recall": 0.26582278481012656,
+          "n": 316
+        },
+        "it_helpdesk": {
+          "auc": 0.7404902789518174,
+          "recall": 0.02197802197802198,
+          "n": 182
+        },
+        "hr": {
+          "auc": 0.6606841093176388,
+          "recall": 0.030534351145038167,
+          "n": 262
+        }
+      }
+    }
+  },
+  "nemotron_length": {
+    "all": {
+      "auc": 0.9851306909873343,
+      "positive_longer": 1.0,
+      "pairs": 1144
+    },
+    "healthcare": {
+      "auc": 0.9781420765027323,
+      "positive_longer": 1.0,
+      "pairs": 183
+    },
+    "ecommerce": {
+      "auc": 0.974745425777922,
+      "positive_longer": 1.0,
+      "pairs": 157
+    },
+    "legal": {
+      "auc": 0.9945855893377759,
+      "positive_longer": 1.0,
+      "pairs": 49
+    },
+    "insurance": {
+      "auc": 0.9871005917159764,
+      "positive_longer": 1.0,
+      "pairs": 65
+    },
+    "education": {
+      "auc": 0.9958444444444444,
+      "positive_longer": 1.0,
+      "pairs": 150
+    },
+    "real_estate": {
+      "auc": 0.99603515625,
+      "positive_longer": 1.0,
+      "pairs": 160
+    },
+    "logistics": {
+      "auc": 0.996394808524275,
+      "positive_longer": 1.0,
+      "pairs": 158
+    },
+    "it_helpdesk": {
+      "auc": 0.9949885279555609,
+      "positive_longer": 1.0,
+      "pairs": 91
+    },
+    "hr": {
+      "auc": 0.9822854146028787,
+      "positive_longer": 1.0,
+      "pairs": 131
+    }
+  },
+  "diagnostics": {
+    "hard_negatives": {
+      "share": {
+        "test": {
+          "code": 0.3356,
+          "email": 0.4,
+          "table": 0.4
+        },
+        "train": {
+          "code": 0.22,
+          "email": 0.42115384615384616,
+          "table": 0.09857482185273159
+        },
+        "validation": {
+          "code": 0.305,
+          "email": 0.3375,
+          "table": 0.085
+        }
+      },
+      "auc": {
+        "hard_negative": {
+          "all": {
+            "auc": 0.9046039460435473,
+            "recall": 0.22027842227378192,
+            "n": 30009
+          },
+          "code": {
+            "auc": 0.8992438617401668,
+            "recall": 0.3196,
+            "n": 3339
+          },
+          "table": {
+            "auc": 0.954415137314185,
+            "recall": 0.6688888888888889,
+            "n": 22050
+          },
+          "email": {
+            "auc": 0.7293817722681358,
+            "recall": 0.054242424242424245,
+            "n": 4620
+          }
+        },
+        "standard": {
+          "all": {
+            "auc": 0.9232656749886259,
+            "recall": 0.5043155452436194,
+            "n": 34641
+          },
+          "code": {
+            "auc": 0.9658913907284769,
+            "recall": 0.6068,
+            "n": 4161
+          },
+          "table": {
+            "auc": 0.9359981254724112,
+            "recall": 0.6208253968253968,
+            "n": 25200
+          },
+          "email": {
+            "auc": 0.8788305785123968,
+            "recall": 0.22818181818181818,
+            "n": 5280
+          }
+        }
+      }
+    },
+    "top_features": {
+      "code": {
+        "1": [
+          {
+            "feature": "your",
+            "weight": 17.080369386277127,
+            "contribution": 0.833234129322939,
+            "origin": "injection_span",
+            "span_share": 0.9670050761421319
+          },
+          {
+            "feature": "code",
+            "weight": 3.2994763858369396,
+            "contribution": 0.2722184924238999,
+            "origin": "injection_span",
+            "span_share": 0.9090909090909091
+          },
+          {
+            "feature": "import",
+            "weight": 2.478258604228996,
+            "contribution": 0.26844232617816255,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "the following",
+            "weight": 4.414151160208815,
+            "contribution": 0.21721654381744432,
+            "origin": "injection_span",
+            "span_share": 0.9635220125786164
+          },
+          {
+            "feature": "requests",
+            "weight": 3.5501986381453006,
+            "contribution": 0.2134987581850186,
+            "origin": "injection_span",
+            "span_share": 0.9721518987341772
+          },
+          {
+            "feature": "in your",
+            "weight": 11.224237450792298,
+            "contribution": 0.20429169188126964,
+            "origin": "injection_span",
+            "span_share": 0.9692307692307692
+          },
+          {
+            "feature": "following",
+            "weight": 4.0051152135390815,
+            "contribution": 0.1936744955851791,
+            "origin": "injection_span",
+            "span_share": 0.939877300613497
+          },
+          {
+            "feature": "com",
+            "weight": 5.398207595397509,
+            "contribution": 0.1692794628327691,
+            "origin": "injection_span",
+            "span_share": 0.8247126436781609
+          },
+          {
+            "feature": "of",
+            "weight": 5.45479614398989,
+            "contribution": 0.16829514719237482,
+            "origin": "injection_span",
+            "span_share": 0.5805537388271201
+          },
+          {
+            "feature": "response",
+            "weight": 11.471595991185131,
+            "contribution": 0.15164881292941962,
+            "origin": "injection_span",
+            "span_share": 0.993574297188755
+          },
+          {
+            "feature": "example",
+            "weight": 4.057247624086347,
+            "contribution": 0.14451966418137588,
+            "origin": "injection_span",
+            "span_share": 0.9205128205128205
+          },
+          {
+            "feature": "subprocess",
+            "weight": 2.4736727692172673,
+            "contribution": 0.12867948724887263,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "in",
+            "weight": 3.4495968401195767,
+            "contribution": 0.1270721335500442,
+            "origin": "injection_span",
+            "span_share": 0.7958458083832335
+          },
+          {
+            "feature": "following code",
+            "weight": 2.4711593839528345,
+            "contribution": 0.12066338827507453,
+            "origin": "injection_span",
+            "span_share": 0.9906191369606003
+          },
+          {
+            "feature": "to",
+            "weight": 1.8194599306127752,
+            "contribution": 0.11582177103554805,
+            "origin": "injection_span",
+            "span_share": 0.6917347429120615
+          },
+          {
+            "feature": "with",
+            "weight": 2.6742471718410967,
+            "contribution": 0.1011616222718716,
+            "origin": "injection_span",
+            "span_share": 0.6579337617399901
+          },
+          {
+            "feature": "an",
+            "weight": 3.8488951084151135,
+            "contribution": 0.09946481506619269,
+            "origin": "injection_span",
+            "span_share": 0.6057529610829103
+          },
+          {
+            "feature": "os",
+            "weight": 3.2217797541376987,
+            "contribution": 0.09650351829237572,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "import requests",
+            "weight": 2.2958021196991356,
+            "contribution": 0.07081526359501705,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "write",
+            "weight": 2.223572029122194,
+            "contribution": 0.06592764509212538,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "example com",
+            "weight": 2.6580298091765613,
+            "contribution": 0.06504651971766676,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "your response",
+            "weight": 11.397993676250186,
+            "contribution": 0.06077410511648869,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "the",
+            "weight": 0.9480906245795705,
+            "contribution": 0.060538704652393346,
+            "origin": "injection_span",
+            "span_share": 0.761746821448314
+          },
+          {
+            "feature": "file",
+            "weight": 1.191035908535291,
+            "contribution": 0.05214565871452145,
+            "origin": "injection_span",
+            "span_share": 0.7048458149779736
+          },
+          {
+            "feature": "how",
+            "weight": 7.399541120813371,
+            "contribution": 0.05211063196976261,
+            "origin": "injection_span",
+            "span_share": 0.8401880141010576
+          },
+          {
+            "feature": "do",
+            "weight": 4.1066091162265215,
+            "contribution": 0.0517865825636105,
+            "origin": "injection_span",
+            "span_share": 0.5666666666666667
+          },
+          {
+            "feature": "you",
+            "weight": 0.7747762842267972,
+            "contribution": 0.04683442806527621,
+            "origin": "document",
+            "span_share": 0.3948374760994264
+          },
+          {
+            "feature": "code snippet",
+            "weight": 1.1288676314222748,
+            "contribution": 0.046488133998600904,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "is",
+            "weight": 0.7524900266766387,
+            "contribution": 0.04475402533284363,
+            "origin": "document",
+            "span_share": 0.2546201232032854
+          },
+          {
+            "feature": "socket",
+            "weight": 1.421114344353831,
+            "contribution": 0.04157125360190141,
+            "origin": "injection_span",
+            "span_share": 1.0
+          }
+        ],
+        "0": [
+          {
+            "feature": "print",
+            "weight": -3.540301036251778,
+            "contribution": 0.22134920823896664,
+            "origin": "benign_span",
+            "span_share": 0.8939051918735892
+          },
+          {
+            "feature": "python",
+            "weight": -1.7131704013355153,
+            "contribution": 0.14291427051717717,
+            "origin": "benign_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "this",
+            "weight": -2.917268664341677,
+            "contribution": 0.13184385367284654,
+            "origin": "document",
+            "span_share": 0.36574746008708275
+          },
+          {
+            "feature": "if",
+            "weight": -2.075561977070219,
+            "contribution": 0.09889860503133074,
+            "origin": "document",
+            "span_share": 0.3861997940267765
+          },
+          {
+            "feature": "as",
+            "weight": -1.552477644179503,
+            "contribution": 0.07809188677945982,
+            "origin": "document",
+            "span_share": 0.3556231003039514
+          },
+          {
+            "feature": "python import",
+            "weight": -2.0832839151121263,
+            "contribution": 0.07070850072384435,
+            "origin": "benign_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "error",
+            "weight": -1.3058802393412012,
+            "contribution": 0.06370502443302109,
+            "origin": "document",
+            "span_share": 0.06631299734748011
+          },
+          {
+            "feature": "it",
+            "weight": -1.3206298426645433,
+            "contribution": 0.06285130781729006,
+            "origin": "document",
+            "span_share": 0.12372634643377002
+          },
+          {
+            "feature": "not",
+            "weight": -2.3244725726909032,
+            "contribution": 0.056434589918406844,
+            "origin": "document",
+            "span_share": 0.3125
+          },
+          {
+            "feature": "if you",
+            "weight": -1.8746354341003806,
+            "contribution": 0.04861510319383104,
+            "origin": "document",
+            "span_share": 0.2463768115942029
+          },
+          {
+            "feature": "list",
+            "weight": -1.4931788841074047,
+            "contribution": 0.04377754475354581,
+            "origin": "document",
+            "span_share": 0.3522727272727273
+          },
+          {
+            "feature": "you can",
+            "weight": -1.3544653980155203,
+            "contribution": 0.041752045872768755,
+            "origin": "document",
+            "span_share": 0.3127208480565371
+          },
+          {
+            "feature": "be",
+            "weight": -1.21006564580614,
+            "contribution": 0.04142526733963648,
+            "origin": "document",
+            "span_share": 0.17750439367311072
+          },
+          {
+            "feature": "try",
+            "weight": -1.2857273195699255,
+            "contribution": 0.03660358467680291,
+            "origin": "document",
+            "span_share": 0.3524229074889868
+          },
+          {
+            "feature": "np",
+            "weight": -0.7044125011451315,
+            "contribution": 0.03289582115693064,
+            "origin": "document",
+            "span_share": 0.4857142857142857
+          },
+          {
+            "feature": "all",
+            "weight": -2.1763116781961873,
+            "contribution": 0.03257850715034851,
+            "origin": "document",
+            "span_share": 0.475
+          },
+          {
+            "feature": "when",
+            "weight": -1.5972141474833157,
+            "contribution": 0.032457378384352815,
+            "origin": "benign_span",
+            "span_share": 0.5200729927007299
+          },
+          {
+            "feature": "or",
+            "weight": -1.1055521330866758,
+            "contribution": 0.0318279543525327,
+            "origin": "document",
+            "span_share": 0.32443257676902537
+          },
+          {
+            "feature": "from",
+            "weight": -0.9928484019614331,
+            "contribution": 0.03083867721639997,
+            "origin": "document",
+            "span_share": 0.28718354430379744
+          },
+          {
+            "feature": "was",
+            "weight": -3.4943391236297687,
+            "contribution": 0.02997718025082654,
+            "origin": "document",
+            "span_share": 0.48708920187793425
+          },
+          {
+            "feature": "some",
+            "weight": -2.734999352738634,
+            "contribution": 0.028339028436651842,
+            "origin": "benign_span",
+            "span_share": 0.6300211416490487
+          },
+          {
+            "feature": "to the",
+            "weight": -2.071718957842219,
+            "contribution": 0.027870420698163395,
+            "origin": "document",
+            "span_share": 0.4046875
+          },
+          {
+            "feature": "note",
+            "weight": -1.8741363722538535,
+            "contribution": 0.026702488626826785,
+            "origin": "benign_span",
+            "span_share": 0.6245954692556634
+          },
+          {
+            "feature": "have",
+            "weight": -1.3231125239165393,
+            "contribution": 0.026390594902571878,
+            "origin": "document",
+            "span_share": 0.15287517531556802
+          },
+          {
+            "feature": "in the",
+            "weight": -1.6897697889116126,
+            "contribution": 0.02488549554633145,
+            "origin": "benign_span",
+            "span_share": 0.5201668984700973
+          },
+          {
+            "feature": "array",
+            "weight": -0.612741481941962,
+            "contribution": 0.024484173333312473,
+            "origin": "document",
+            "span_share": 0.36496350364963503
+          },
+          {
+            "feature": "by",
+            "weight": -1.4423691831278034,
+            "contribution": 0.02340415106419721,
+            "origin": "document",
+            "span_share": 0.4692982456140351
+          },
+          {
+            "feature": "each",
+            "weight": -2.3079488607407255,
+            "contribution": 0.022465994868983354,
+            "origin": "benign_span",
+            "span_share": 0.7888888888888889
+          },
+          {
+            "feature": "two",
+            "weight": -1.7940113973758718,
+            "contribution": 0.021930993199392644,
+            "origin": "document",
+            "span_share": 0.38288288288288286
+          },
+          {
+            "feature": "set",
+            "weight": -0.7609476763537001,
+            "contribution": 0.02000266389053616,
+            "origin": "document",
+            "span_share": 0.2430939226519337
+          }
+        ]
+      },
+      "email": {
+        "1": [
+          {
+            "feature": "your",
+            "weight": 17.080369386277127,
+            "contribution": 1.080138778704715,
+            "origin": "injection_span",
+            "span_share": 0.9670050761421319
+          },
+          {
+            "feature": "reply",
+            "weight": 7.837947687035123,
+            "contribution": 0.3347722607156916,
+            "origin": "injection_span",
+            "span_share": 0.8731070496083551
+          },
+          {
+            "feature": "com",
+            "weight": 5.398207595397509,
+            "contribution": 0.2553416405020674,
+            "origin": "injection_span",
+            "span_share": 0.8247126436781609
+          },
+          {
+            "feature": "your response",
+            "weight": 11.397993676250186,
+            "contribution": 0.16711554884628096,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "response",
+            "weight": 11.471595991185131,
+            "contribution": 0.163776097042693,
+            "origin": "injection_span",
+            "span_share": 0.993574297188755
+          },
+          {
+            "feature": "in your",
+            "weight": 11.224237450792298,
+            "contribution": 0.14682491073412623,
+            "origin": "injection_span",
+            "span_share": 0.9692307692307692
+          },
+          {
+            "feature": "of",
+            "weight": 5.45479614398989,
+            "contribution": 0.11357410851058376,
+            "origin": "injection_span",
+            "span_share": 0.5805537388271201
+          },
+          {
+            "feature": "your answer",
+            "weight": 9.237939389678912,
+            "contribution": 0.10580952551530481,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "answer",
+            "weight": 8.911721380586913,
+            "contribution": 0.10046564444116207,
+            "origin": "injection_span",
+            "span_share": 0.9778761061946902
+          },
+          {
+            "feature": "in",
+            "weight": 3.4495968401195767,
+            "contribution": 0.09594848866148908,
+            "origin": "injection_span",
+            "span_share": 0.7958458083832335
+          },
+          {
+            "feature": "your reply",
+            "weight": 9.27710436135815,
+            "contribution": 0.09505101103841836,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "to",
+            "weight": 1.8194599306127752,
+            "contribution": 0.08219759907651823,
+            "origin": "injection_span",
+            "span_share": 0.6917347429120615
+          },
+          {
+            "feature": "how",
+            "weight": 7.399541120813371,
+            "contribution": 0.05719178183968393,
+            "origin": "injection_span",
+            "span_share": 0.8401880141010576
+          },
+          {
+            "feature": "with",
+            "weight": 2.6742471718410967,
+            "contribution": 0.05703667509594529,
+            "origin": "injection_span",
+            "span_share": 0.6579337617399901
+          },
+          {
+            "feature": "you",
+            "weight": 0.7747762842267972,
+            "contribution": 0.05675457791865439,
+            "origin": "document",
+            "span_share": 0.3948374760994264
+          },
+          {
+            "feature": "from your",
+            "weight": 1.4702615150672835,
+            "contribution": 0.051465511225261516,
+            "origin": "injection_span",
+            "span_share": 0.5042016806722689
+          },
+          {
+            "feature": "provide",
+            "weight": 7.824710966012299,
+            "contribution": 0.04855171091606284,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "the",
+            "weight": 0.9480906245795705,
+            "contribution": 0.04362435316502212,
+            "origin": "injection_span",
+            "span_share": 0.761746821448314
+          },
+          {
+            "feature": "an",
+            "weight": 3.8488951084151135,
+            "contribution": 0.04134716401501635,
+            "origin": "injection_span",
+            "span_share": 0.6057529610829103
+          },
+          {
+            "feature": "hello",
+            "weight": 1.3976259392538286,
+            "contribution": 0.037637693800997025,
+            "origin": "document",
+            "span_share": 0.3371104815864023
+          },
+          {
+            "feature": "what",
+            "weight": 10.076063158822262,
+            "contribution": 0.03761242452490298,
+            "origin": "injection_span",
+            "span_share": 0.8646684831970936
+          },
+          {
+            "feature": "using",
+            "weight": 2.721376209807165,
+            "contribution": 0.03728049261730239,
+            "origin": "injection_span",
+            "span_share": 0.6398929049531459
+          },
+          {
+            "feature": "for",
+            "weight": 0.7689463171050906,
+            "contribution": 0.03192055337778652,
+            "origin": "injection_span",
+            "span_share": 0.6119725928597187
+          },
+          {
+            "feature": "add",
+            "weight": 3.5301160607381874,
+            "contribution": 0.030998244350587296,
+            "origin": "injection_span",
+            "span_share": 0.9675324675324676
+          },
+          {
+            "feature": "thank",
+            "weight": 1.7276267944887935,
+            "contribution": 0.02929700080580081,
+            "origin": "injection_span",
+            "span_share": 0.5979899497487438
+          },
+          {
+            "feature": "thank you",
+            "weight": 1.7276267944887935,
+            "contribution": 0.02929700080580081,
+            "origin": "injection_span",
+            "span_share": 0.5979899497487438
+          },
+          {
+            "feature": "to your",
+            "weight": 1.4418360826259717,
+            "contribution": 0.028650053790671492,
+            "origin": "injection_span",
+            "span_share": 0.7362204724409449
+          },
+          {
+            "feature": "are the",
+            "weight": 5.059159408443213,
+            "contribution": 0.02776752699185253,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "about",
+            "weight": 3.446229195256798,
+            "contribution": 0.023775487985790794,
+            "origin": "injection_span",
+            "span_share": 0.8585131894484412
+          },
+          {
+            "feature": "modify your",
+            "weight": 4.338138749481714,
+            "contribution": 0.0237129117937012,
+            "origin": "injection_span",
+            "span_share": 1.0
+          }
+        ],
+        "0": [
+          {
+            "feature": "this",
+            "weight": -2.917268664341677,
+            "contribution": 0.18862128774589013,
+            "origin": "document",
+            "span_share": 0.36574746008708275
+          },
+          {
+            "feature": "was",
+            "weight": -3.4943391236297687,
+            "contribution": 0.13408578603203591,
+            "origin": "document",
+            "span_share": 0.48708920187793425
+          },
+          {
+            "feature": "if",
+            "weight": -2.075561977070219,
+            "contribution": 0.12238851150918736,
+            "origin": "document",
+            "span_share": 0.3861997940267765
+          },
+          {
+            "feature": "mercury",
+            "weight": -0.9015319180271957,
+            "contribution": 0.11358237663833878,
+            "origin": "document",
+            "span_share": 0.05714285714285714
+          },
+          {
+            "feature": "account",
+            "weight": -1.3288785273739738,
+            "contribution": 0.09290578581330258,
+            "origin": "document",
+            "span_share": 0.17318435754189945
+          },
+          {
+            "feature": "if you",
+            "weight": -1.8746354341003806,
+            "contribution": 0.08950740957546442,
+            "origin": "document",
+            "span_share": 0.2463768115942029
+          },
+          {
+            "feature": "please",
+            "weight": -2.9385045339864635,
+            "contribution": 0.08160139602151392,
+            "origin": "benign_span",
+            "span_share": 0.9285714285714286
+          },
+          {
+            "feature": "have",
+            "weight": -1.3231125239165393,
+            "contribution": 0.0739793471371459,
+            "origin": "document",
+            "span_share": 0.15287517531556802
+          },
+          {
+            "feature": "you have",
+            "weight": -1.2309012676344757,
+            "contribution": 0.06662250022474854,
+            "origin": "document",
+            "span_share": 0.034261241970021415
+          },
+          {
+            "feature": "has",
+            "weight": -1.3066532517551923,
+            "contribution": 0.0603754242056629,
+            "origin": "document",
+            "span_share": 0.1740041928721174
+          },
+          {
+            "feature": "from",
+            "weight": -0.9928484019614331,
+            "contribution": 0.05516835582508295,
+            "origin": "document",
+            "span_share": 0.28718354430379744
+          },
+          {
+            "feature": "charge",
+            "weight": -1.2303900847762264,
+            "contribution": 0.05149008427976803,
+            "origin": "document",
+            "span_share": 0.4742268041237113
+          },
+          {
+            "feature": "payment",
+            "weight": -1.074529699707286,
+            "contribution": 0.0503910934877856,
+            "origin": "document",
+            "span_share": 0.4722222222222222
+          },
+          {
+            "feature": "received",
+            "weight": -0.7189719606613587,
+            "contribution": 0.04961013873173652,
+            "origin": "document",
+            "span_share": 0.06015037593984962
+          },
+          {
+            "feature": "your company",
+            "weight": -0.7737794179368155,
+            "contribution": 0.04678998258275238,
+            "origin": "document",
+            "span_share": 0.017857142857142856
+          },
+          {
+            "feature": "by",
+            "weight": -1.4423691831278034,
+            "contribution": 0.04518700441794322,
+            "origin": "document",
+            "span_share": 0.4692982456140351
+          },
+          {
+            "feature": "company",
+            "weight": -0.7181481220218463,
+            "contribution": 0.04101653273892246,
+            "origin": "document",
+            "span_share": 0.024793388429752067
+          },
+          {
+            "feature": "any questions",
+            "weight": -0.7717277318952909,
+            "contribution": 0.04069143304059195,
+            "origin": "document",
+            "span_share": 0.045871559633027525
+          },
+          {
+            "feature": "be",
+            "weight": -1.21006564580614,
+            "contribution": 0.04029080300774683,
+            "origin": "document",
+            "span_share": 0.17750439367311072
+          },
+          {
+            "feature": "been",
+            "weight": -1.134954038631776,
+            "contribution": 0.040041444638673186,
+            "origin": "document",
+            "span_share": 0.17889908256880735
+          },
+          {
+            "feature": "transaction",
+            "weight": -0.9850357866546744,
+            "contribution": 0.038270928139314715,
+            "origin": "document",
+            "span_share": 0.2695035460992908
+          },
+          {
+            "feature": "any",
+            "weight": -0.6836968247636013,
+            "contribution": 0.03637718522242043,
+            "origin": "document",
+            "span_share": 0.24173553719008264
+          },
+          {
+            "feature": "have any",
+            "weight": -0.659580951990955,
+            "contribution": 0.03441029360702839,
+            "origin": "document",
+            "span_share": 0.018518518518518517
+          },
+          {
+            "feature": "over",
+            "weight": -1.3720977765015885,
+            "contribution": 0.032591372661529,
+            "origin": "document",
+            "span_share": 0.2725694444444444
+          },
+          {
+            "feature": "hi",
+            "weight": -0.5626444639754252,
+            "contribution": 0.03242323590022476,
+            "origin": "document",
+            "span_share": 0.0
+          },
+          {
+            "feature": "to this",
+            "weight": -0.6435849103262005,
+            "contribution": 0.030557311671767503,
+            "origin": "document",
+            "span_share": 0.026490066225165563
+          },
+          {
+            "feature": "this email",
+            "weight": -0.627963101622903,
+            "contribution": 0.03050395332749946,
+            "origin": "document",
+            "span_share": 0.026490066225165563
+          },
+          {
+            "feature": "has been",
+            "weight": -0.8465818160357479,
+            "contribution": 0.03020872090606319,
+            "origin": "document",
+            "span_share": 0.11197916666666667
+          },
+          {
+            "feature": "you can",
+            "weight": -1.3544653980155203,
+            "contribution": 0.029848198914823793,
+            "origin": "document",
+            "span_share": 0.3127208480565371
+          },
+          {
+            "feature": "checking",
+            "weight": -0.5644176160459027,
+            "contribution": 0.029774412030532493,
+            "origin": "document",
+            "span_share": 0.044
+          }
+        ]
+      },
+      "table": {
+        "1": [
+          {
+            "feature": "your",
+            "weight": 17.080369386277127,
+            "contribution": 0.39899056587912246,
+            "origin": "injection_span",
+            "span_share": 0.9670050761421319
+          },
+          {
+            "feature": "your response",
+            "weight": 11.397993676250186,
+            "contribution": 0.16728597742888285,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "response",
+            "weight": 11.471595991185131,
+            "contribution": 0.16394311996949873,
+            "origin": "injection_span",
+            "span_share": 0.993574297188755
+          },
+          {
+            "feature": "in your",
+            "weight": 11.224237450792298,
+            "contribution": 0.1353928267708997,
+            "origin": "injection_span",
+            "span_share": 0.9692307692307692
+          },
+          {
+            "feature": "of",
+            "weight": 5.45479614398989,
+            "contribution": 0.1250164081439225,
+            "origin": "injection_span",
+            "span_share": 0.5805537388271201
+          },
+          {
+            "feature": "your answer",
+            "weight": 9.237939389678912,
+            "contribution": 0.10619512204960135,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "answer",
+            "weight": 8.911721380586913,
+            "contribution": 0.10083176652822093,
+            "origin": "injection_span",
+            "span_share": 0.9778761061946902
+          },
+          {
+            "feature": "your reply",
+            "weight": 9.27710436135815,
+            "contribution": 0.0954359437837496,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "reply",
+            "weight": 7.837947687035123,
+            "contribution": 0.09356492063450453,
+            "origin": "injection_span",
+            "span_share": 0.8731070496083551
+          },
+          {
+            "feature": "in",
+            "weight": 3.4495968401195767,
+            "contribution": 0.08261966653236812,
+            "origin": "injection_span",
+            "span_share": 0.7958458083832335
+          },
+          {
+            "feature": "provide",
+            "weight": 7.824710966012299,
+            "contribution": 0.04872501778611429,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "how",
+            "weight": 7.399541120813371,
+            "contribution": 0.04576835223493929,
+            "origin": "injection_span",
+            "span_share": 0.8401880141010576
+          },
+          {
+            "feature": "what",
+            "weight": 10.076063158822262,
+            "contribution": 0.0445570648543504,
+            "origin": "injection_span",
+            "span_share": 0.8646684831970936
+          },
+          {
+            "feature": "to",
+            "weight": 1.8194599306127752,
+            "contribution": 0.03487229367206018,
+            "origin": "injection_span",
+            "span_share": 0.6917347429120615
+          },
+          {
+            "feature": "about",
+            "weight": 3.446229195256798,
+            "contribution": 0.02859313298654055,
+            "origin": "injection_span",
+            "span_share": 0.8585131894484412
+          },
+          {
+            "feature": "with",
+            "weight": 2.6742471718410967,
+            "contribution": 0.0280025039679866,
+            "origin": "injection_span",
+            "span_share": 0.6579337617399901
+          },
+          {
+            "feature": "the",
+            "weight": 0.9480906245795705,
+            "contribution": 0.025943951442332837,
+            "origin": "injection_span",
+            "span_share": 0.761746821448314
+          },
+          {
+            "feature": "modify your",
+            "weight": 4.338138749481714,
+            "contribution": 0.023657988567131,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "modify",
+            "weight": 4.072780682455583,
+            "contribution": 0.021835128982559876,
+            "origin": "injection_span",
+            "span_share": 0.967479674796748
+          },
+          {
+            "feature": "com",
+            "weight": 5.398207595397509,
+            "contribution": 0.021669179135331947,
+            "origin": "injection_span",
+            "span_share": 0.8247126436781609
+          },
+          {
+            "feature": "integrate",
+            "weight": 3.866687688199407,
+            "contribution": 0.021263993408580047,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "add",
+            "weight": 3.5301160607381874,
+            "contribution": 0.021094431642895827,
+            "origin": "injection_span",
+            "span_share": 0.9675324675324676
+          },
+          {
+            "feature": "are the",
+            "weight": 5.059159408443213,
+            "contribution": 0.020500226067661935,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "what are",
+            "weight": 5.0852053097210135,
+            "contribution": 0.018959732189777423,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "of the",
+            "weight": 1.864503360730064,
+            "contribution": 0.018676675924826247,
+            "origin": "document",
+            "span_share": 0.4379370629370629
+          },
+          {
+            "feature": "provide your",
+            "weight": 4.897273163862048,
+            "contribution": 0.017552581470923024,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "sentence",
+            "weight": 3.80137916595544,
+            "contribution": 0.017400647165901784,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "enhance your",
+            "weight": 3.6309186056547547,
+            "contribution": 0.017234965435598017,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "enhance",
+            "weight": 3.609250146663611,
+            "contribution": 0.01711486094705997,
+            "origin": "injection_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "answer to",
+            "weight": 4.334761229997793,
+            "contribution": 0.014207851161496301,
+            "origin": "injection_span",
+            "span_share": 1.0
+          }
+        ],
+        "0": [
+          {
+            "feature": "column",
+            "weight": -2.076038000783424,
+            "contribution": 0.032690051019901585,
+            "origin": "benign_span",
+            "span_share": 0.7208480565371025
+          },
+          {
+            "feature": "total",
+            "weight": -1.1005738209175635,
+            "contribution": 0.020650929530913617,
+            "origin": "document",
+            "span_share": 0.07326007326007326
+          },
+          {
+            "feature": "not",
+            "weight": -2.3244725726909032,
+            "contribution": 0.018646709237743003,
+            "origin": "document",
+            "span_share": 0.3125
+          },
+          {
+            "feature": "were",
+            "weight": -4.730986470672237,
+            "contribution": 0.01838886051290597,
+            "origin": "benign_span",
+            "span_share": 0.8771653543307086
+          },
+          {
+            "feature": "all",
+            "weight": -2.1763116781961873,
+            "contribution": 0.01808001935105634,
+            "origin": "document",
+            "span_share": 0.475
+          },
+          {
+            "feature": "this",
+            "weight": -2.917268664341677,
+            "contribution": 0.017821869814030306,
+            "origin": "document",
+            "span_share": 0.36574746008708275
+          },
+          {
+            "feature": "team",
+            "weight": -1.3758640596212737,
+            "contribution": 0.01615264997363838,
+            "origin": "document",
+            "span_share": 0.20854700854700856
+          },
+          {
+            "feature": "games",
+            "weight": -1.838392855308943,
+            "contribution": 0.015504091168447656,
+            "origin": "document",
+            "span_share": 0.3854660347551343
+          },
+          {
+            "feature": "table",
+            "weight": -1.8706608166179877,
+            "contribution": 0.014833827331755894,
+            "origin": "benign_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "season",
+            "weight": -2.276159221343232,
+            "contribution": 0.014477008421675356,
+            "origin": "document",
+            "span_share": 0.4076655052264808
+          },
+          {
+            "feature": "to the",
+            "weight": -2.071718957842219,
+            "contribution": 0.013139119466033553,
+            "origin": "document",
+            "span_share": 0.4046875
+          },
+          {
+            "feature": "year",
+            "weight": -0.9238849782281229,
+            "contribution": 0.013011278430487955,
+            "origin": "document",
+            "span_share": 0.09716386554621849
+          },
+          {
+            "feature": "note",
+            "weight": -1.8741363722538535,
+            "contribution": 0.012150571631888676,
+            "origin": "benign_span",
+            "span_share": 0.6245954692556634
+          },
+          {
+            "feature": "by",
+            "weight": -1.4423691831278034,
+            "contribution": 0.011670858230439994,
+            "origin": "document",
+            "span_share": 0.4692982456140351
+          },
+          {
+            "feature": "please",
+            "weight": -2.9385045339864635,
+            "contribution": 0.011431936782013492,
+            "origin": "benign_span",
+            "span_share": 0.9285714285714286
+          },
+          {
+            "feature": "time",
+            "weight": -1.6229875355615466,
+            "contribution": 0.011172819482748864,
+            "origin": "document",
+            "span_share": 0.21057118499573743
+          },
+          {
+            "feature": "when",
+            "weight": -1.5972141474833157,
+            "contribution": 0.010871019129309633,
+            "origin": "benign_span",
+            "span_share": 0.5200729927007299
+          },
+          {
+            "feature": "in the",
+            "weight": -1.6897697889116126,
+            "contribution": 0.01065001327384124,
+            "origin": "benign_span",
+            "span_share": 0.5201668984700973
+          },
+          {
+            "feature": "results",
+            "weight": -2.8791804261044884,
+            "contribution": 0.010204057439081936,
+            "origin": "benign_span",
+            "span_share": 0.8289855072463768
+          },
+          {
+            "feature": "gold",
+            "weight": -0.8233656402231868,
+            "contribution": 0.010183009374123728,
+            "origin": "document",
+            "span_share": 0.1111111111111111
+          },
+          {
+            "feature": "was",
+            "weight": -3.4943391236297687,
+            "contribution": 0.010170938054262862,
+            "origin": "document",
+            "span_share": 0.48708920187793425
+          },
+          {
+            "feature": "no",
+            "weight": -0.9463276081875296,
+            "contribution": 0.010165963496849725,
+            "origin": "document",
+            "span_share": 0.16183574879227053
+          },
+          {
+            "feature": "note that",
+            "weight": -1.7483505130598096,
+            "contribution": 0.008904798989800617,
+            "origin": "benign_span",
+            "span_share": 0.8088235294117647
+          },
+          {
+            "feature": "rank",
+            "weight": -0.6854673782981641,
+            "contribution": 0.00861281835082194,
+            "origin": "document",
+            "span_share": 0.030626780626780627
+          },
+          {
+            "feature": "positions",
+            "weight": -1.6858624812547534,
+            "contribution": 0.008520577330613321,
+            "origin": "benign_span",
+            "span_share": 0.7136363636363636
+          },
+          {
+            "feature": "some",
+            "weight": -2.734999352738634,
+            "contribution": 0.008336414227720062,
+            "origin": "benign_span",
+            "span_share": 0.6300211416490487
+          },
+          {
+            "feature": "as",
+            "weight": -1.552477644179503,
+            "contribution": 0.008190513688484741,
+            "origin": "document",
+            "span_share": 0.3556231003039514
+          },
+          {
+            "feature": "column for",
+            "weight": -0.8496404399484436,
+            "contribution": 0.00803716800812737,
+            "origin": "benign_span",
+            "span_share": 1.0
+          },
+          {
+            "feature": "it",
+            "weight": -1.3206298426645433,
+            "contribution": 0.00800675876298243,
+            "origin": "document",
+            "span_share": 0.12372634643377002
+          },
+          {
+            "feature": "place",
+            "weight": -1.1717782330993707,
+            "contribution": 0.007951930055543462,
+            "origin": "document",
+            "span_share": 0.2158273381294964
+          }
+        ]
+      }
+    },
+    "ablation": {
+      "dropped": [
+        "were",
+        "print",
+        "please",
+        "results",
+        "reflect",
+        "some",
+        "figures",
+        "marked",
+        "each",
+        "listed",
+        "during",
+        "source",
+        "python import",
+        "multiple",
+        "column",
+        "recorded",
+        "where",
+        "noted",
+        "confirm",
+        "matches",
+        "athletes",
+        "reflects",
+        "entries",
+        "due to",
+        "note",
+        "table",
+        "indicate",
+        "across",
+        "years",
+        "scores",
+        "due",
+        "rounded",
+        "included",
+        "note that",
+        "events",
+        "rounded to",
+        "python",
+        "after",
+        "in the",
+        "positions",
+        "includes",
+        "standard",
+        "times",
+        "conditions",
+        "when",
+        "names",
+        "medals",
+        "totals",
+        "top",
+        "held"
+      ],
+      "auc": {
+        "all": {
+          "before": 0.9159404051442445,
+          "after": 0.8952284429993379
+        },
+        "code": {
+          "before": 0.94352448,
+          "after": 0.92802832
+        },
+        "table": {
+          "before": 0.9433649302091207,
+          "after": 0.9271565069286973
+        },
+        "email": {
+          "before": 0.8190510560146924,
+          "after": 0.7988866850321396
+        }
+      }
+    },
+    "span_only": {
+      "all": {
+        "auc": 0.9678500137273163,
+        "recall": 0.7219489559164733,
+        "n": 43100
+      },
+      "code": {
+        "auc": 0.995384,
+        "recall": 0.94,
+        "n": 5000
+      },
+      "table": {
+        "auc": 0.9814450793650793,
+        "recall": 0.88,
+        "n": 31500
+      },
+      "email": {
+        "auc": 0.911220202020202,
+        "recall": 0.4666666666666667,
+        "n": 6600
+      }
+    },
+    "benign_words": {
+      "top": [
+        {
+          "word": "python",
+          "z": 44.17958879179916,
+          "benign": 3696,
+          "injected": 440
+        },
+        {
+          "word": "if",
+          "z": 31.924273071669557,
+          "benign": 2021,
+          "injected": 351
+        },
+        {
+          "word": "when",
+          "z": 31.593053229576853,
+          "benign": 2010,
+          "injected": 140
+        },
+        {
+          "word": "check",
+          "z": 25.785143816518744,
+          "benign": 1266,
+          "injected": 140
+        },
+        {
+          "word": "for",
+          "z": 22.19241066749599,
+          "benign": 6383,
+          "injected": 4575
+        },
+        {
+          "word": "make",
+          "z": 20.17588641449585,
+          "benign": 900,
+          "injected": 211
+        },
+        {
+          "word": "any",
+          "z": 18.781573040332407,
+          "benign": 723,
+          "injected": 140
+        },
+        {
+          "word": "this",
+          "z": 17.9631215410324,
+          "benign": 2823,
+          "injected": 1805
+        },
+        {
+          "word": "before",
+          "z": 17.56459134021954,
+          "benign": 857,
+          "injected": 281
+        },
+        {
+          "word": "each",
+          "z": 16.267414888424785,
+          "benign": 754,
+          "injected": 254
+        },
+        {
+          "word": "may",
+          "z": 15.120223540869986,
+          "benign": 508,
+          "injected": 120
+        },
+        {
+          "word": "or",
+          "z": 14.878619078759554,
+          "benign": 952,
+          "injected": 444
+        },
+        {
+          "word": "details",
+          "z": 14.10554966365362,
+          "benign": 657,
+          "injected": 254
+        },
+        {
+          "word": "home",
+          "z": 14.05784037958707,
+          "benign": 434,
+          "injected": 100
+        },
+        {
+          "word": "it",
+          "z": 13.716090306680602,
+          "benign": 521,
+          "injected": 170
+        },
+        {
+          "word": "def",
+          "z": 13.673372700894452,
+          "benign": 591,
+          "injected": 220
+        },
+        {
+          "word": "first",
+          "z": 13.584530033980222,
+          "benign": 670,
+          "injected": 279
+        },
+        {
+          "word": "values",
+          "z": 13.47287069141272,
+          "benign": 395,
+          "injected": 20
+        },
+        {
+          "word": "result",
+          "z": 13.3437758318255,
+          "benign": 405,
+          "injected": 100
+        },
+        {
+          "word": "performance",
+          "z": 13.287140211470737,
+          "benign": 341,
+          "injected": 50
+        }
+      ],
+      "share_negatives": 0.44396369137670194,
+      "share_positives": 0.24169440242057488
+    },
+    "by_position": {
+      "all": {
+        "auc": 0.9159404051442445,
+        "recall": 0.3576334106728538,
+        "n": 43100
+      },
+      "start": {
+        "auc": 0.9187954202740475,
+        "recall": 0.374495336210497,
+        "n": 14366
+      },
+      "end": {
+        "auc": 0.9161742090503023,
+        "recall": 0.3463251670378619,
+        "n": 14368
+      },
+      "middle": {
+        "auc": 0.9128806977679773,
+        "recall": 0.37268550744814144,
+        "n": 14366
+      }
+    },
+    "by_attack_group": {
+      "Base Encoding": {
+        "auc": 0.9521824043648088,
+        "recall": 0.39133858267716537,
+        "n": 2540
+      },
+      "Blocking Internet Connection": {
+        "auc": 0.940688,
+        "recall": 0.312,
+        "n": 500
+      },
+      "Bringing Down Hosts and Servers (Denial of Service)": {
+        "auc": 0.9156159999999999,
+        "recall": 0.276,
+        "n": 500
+      },
+      "Business Intelligence": {
+        "auc": 0.8613503627007253,
+        "recall": 0.1110236220472441,
+        "n": 2540
+      },
+      "Compromising Computers": {
+        "auc": 0.9744,
+        "recall": 0.62,
+        "n": 500
+      },
+      "Conversational Agent": {
+        "auc": 0.7438210676421353,
+        "recall": 0.01653543307086614,
+        "n": 2540
+      },
+      "Corrupting an Operating System": {
+        "auc": 0.8719039999999999,
+        "recall": 0.312,
+        "n": 500
+      },
+      "Data Eavesdropping": {
+        "auc": 0.979376,
+        "recall": 0.728,
+        "n": 500
+      },
+      "Emoji Substitution": {
+        "auc": 0.9875336350672702,
+        "recall": 0.6606299212598425,
+        "n": 2540
+      },
+      "Encrypting Documents and Demanding Ransom (Ransomware)": {
+        "auc": 0.9845439999999999,
+        "recall": 0.82,
+        "n": 500
+      },
+      "Entertainment": {
+        "auc": 0.993257486514973,
+        "recall": 0.752755905511811,
+        "n": 2540
+      },
+      "Information Dissemination": {
+        "auc": 0.9939704879409759,
+        "recall": 0.8559055118110236,
+        "n": 2540
+      },
+      "Introduce System Fingerprinting": {
+        "auc": 0.9583999999999999,
+        "recall": 0.436,
+        "n": 500
+      },
+      "Keylogging": {
+        "auc": 0.958784,
+        "recall": 0.44,
+        "n": 500
+      },
+      "Language Translation": {
+        "auc": 0.958512617025234,
+        "recall": 0.5078740157480315,
+        "n": 2540
+      },
+      "Marketing & Advertising": {
+        "auc": 0.9949469898939798,
+        "recall": 0.852755905511811,
+        "n": 2540
+      },
+      "Misinformation & Propaganda": {
+        "auc": 0.9910199020398041,
+        "recall": 0.815748031496063,
+        "n": 2540
+      },
+      "Research Assistance": {
+        "auc": 0.8696856593713187,
+        "recall": 0.1204724409448819,
+        "n": 2540
+      },
+      "Reverse Text": {
+        "auc": 0.9499665199330398,
+        "recall": 0.5149606299212598,
+        "n": 2540
+      },
+      "Scams & Fraud": {
+        "auc": 0.993969867939736,
+        "recall": 0.8377952755905512,
+        "n": 2540
+      },
+      "Screen Scraping": {
+        "auc": 0.926192,
+        "recall": 0.228,
+        "n": 500
+      },
+      "Sentiment Analysis": {
+        "auc": 0.7014241428482857,
+        "recall": 0.04251968503937008,
+        "n": 2540
+      },
+      "Substitution Ciphers": {
+        "auc": 0.9786434372868746,
+        "recall": 0.44173228346456694,
+        "n": 2540
+      },
+      "Task Automation": {
+        "auc": 0.8479310558621117,
+        "recall": 0.05905511811023622,
+        "n": 2540
+      },
+      "Traffic Analysis": {
+        "auc": 0.941024,
+        "recall": 0.42,
+        "n": 500
+      },
+      "all": {
+        "auc": 0.9159404051442445,
+        "recall": 0.3576334106728538,
+        "n": 43100
+      }
+    }
+  },
+  "stop": [],
+  "limits": {
+    "length_auc_stop": 0.7,
+    "tfidf_auc_stop": 0.95
+  },
+  "status": "PUSH ALLOWED",
+  "exit_code": 0
+}

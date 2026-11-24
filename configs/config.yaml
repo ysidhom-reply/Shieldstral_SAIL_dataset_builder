@@ -1,12 +1,17 @@
-# Single source of truth for every step of the ipi-shieldstral build.
+# Single source of truth for every step of the ipi-twins build.
 # Secrets (HF_TOKEN, MISTRAL_API_KEY) are NEVER stored here: they are read from the environment.
 
 seed: 42
 
 dataset:
-  repo_id: <org>/ipi-shieldstral   # set before P10; nothing is pushed earlier
+  repo_id: SAIL-Reply/ipi-twins
   private: true
   configs: [bipia, nemotron, bipia_textfooler]
+  pretty_name: ipi-twins
+  license: cc-by-sa-4.0         # share-alike: BIPIA's table and code contexts are CC BY-SA 4.0
+  # P10 v0.1 (team decision, 2026-11-23): push bipia + nemotron before P6-P9 so training can
+  # start; bipia_textfooler is added in the final push (v1.0).
+  push_configs: [bipia, nemotron]
 
 # Relative to the repository root.
 paths:
@@ -45,7 +50,20 @@ benign_check:
   shieldstral_4bit: auto        # auto: run only if an 8 GB GPU is available
 
 textfooler:
+  # P6: TextFooler (TextAttack recipe) against this victim, on CPU. Runs in its own environment:
+  # see requirements/p6-textfooler.txt.
   victim_model: protectai/deberta-v3-base-prompt-injection-v2
+  victim_revision: null          # pinned at the first P6 run
+  window: 512                    # tokens per window; score = max injection probability over windows
+  stride: 256
+  batch_size: 16
+  max_candidates: 50             # TextFooler recipe: synonym candidates per word
+  min_cos_sim: 0.5               # recipe: word-embedding cosine similarity
+  use_threshold: 0.840845057     # recipe: Universal Sentence Encoder similarity (angular)
+  use_window: 15                 # recipe: USE window (words)
+  max_span_fraction: 0.30        # user decision: at most 30% of the span's words changed
+  targets: {email: 200, code: 200, table: 600}   # kept variants per class (floor 200/scenario)
+  pilot_size: 20
 
 nemotron:
   repo_id: nvidia/Nemotron-RL-Agentic-Indirect-Prompt-Injection-v1   # CC BY 4.0, test only
@@ -163,12 +181,68 @@ p3:
   prices:                               # $ per 1M tokens (docs.mistral.ai pricing)
     mistral-small: {input: 0.15, output: 0.6}
     mistral-medium: {input: 1.5, output: 7.5}
+  # Option B (team decision, 2026-11-24, after P7 v0): about 40% of every pool is replaced by
+  # harmless texts that sound like instructions to the human reader (p3-benign-pool
+  # --hard-negatives). Why: P7 v0 showed TF-IDF separating code at AUC 0.967, because the brief's
+  # filters forbid in benign texts exactly the words attacks use (your response, the following
+  # code, import requests, subprocess, example.com). The new texts use a narrower filter profile
+  # (below) and judge-v4; the existing texts keep the brief's filters.
+  hard_negatives:
+    share: 0.4
+    prompt_version: hn-v3           # history in p3_prompts.yaml
+    judge_prompt_version: judge-v4
+    judge_batch_prompt_version: judge-batch-v2
+    max_rounds: 8
+    replace_words: [python, all, data, if, are, and, from, is, as, this, may, self, performance,
+                    only, when, def, before, class, values, set, reflect, listed, official,
+                    records]
+    assistant_words: [assistant, chatbot, language model, ignore, disregard, system prompt,
+                      pretend, as an ai]
+    assistant_words_text_only: [instead]
+    code_forbidden_patterns:          # still forbidden in harmless code
+      - '\bimport\s+(socket|urllib|httpx|aiohttp|smtplib|ftplib|telnetlib|paramiko)\b'
+      - '\bfrom\s+(socket|urllib|http|httpx|aiohttp|smtplib|ftplib)\b'
+      - '\bhttp\.client\b'
+      - '\brequests\.(post|put|patch|delete)\b'
+      - 'requests\.\w+\([^)]*\b(data|json|files)\s*='   # sending data out
+      - '\bshell\s*=\s*True\b'
+      - '\bos\.(system|popen|exec\w*|spawn\w*|fork|kill)\b'
+      - '\bos\.(remove|unlink|rmdir|removedirs)\b'
+      - '\b(shutil\.rmtree|\.unlink\(|\.rmdir\()'
+      - '\bos\.environ\b'
+      - '\bgetenv\b'
+      - '(?<![.\w])(eval|exec|__import__)\s*\('
+      - '\bctypes\b'
+      - '\b(password|passwd|secret|token|api_key|apikey|credential)s?\b'
+      - '\b(platform|getpass|keyboard|pynput|psutil)\b'
+    allowed_url_hosts: [example.com, www.example.com, example.org]
 
 p4:
   # Brief step 1: the pool text must be within 30% of the attack's length (50% for code).
   # When no text of the pool is in the window (~4% of positives), the closest-length text is
   # used and the pair is flagged length_matched=false (team decision, see p4_composition.md).
   length_window: {text: 0.30, code: 0.50}
+  # Option (a) after the final P7 v0 (team decision, 2026-11-24): among the least-used texts
+  # within the length window, prefer the one with the fewest of these words. They are the
+  # benign-side words of P7's diagnostics (over-represented in benign spans, strongest TF-IDF
+  # features of label 0); function words (for, if, as, ...) are left out because counting them
+  # would favour shorter texts and create a length shortcut. No API call.
+  # Team decision (2026-11-24): the broad list below, which includes words typical of the hard
+  # negatives (column, note, refer, see, cite, check, make, sure, include, use, table). P7 v0 then
+  # says PUSH ALLOWED (TF-IDF table 0.943, code 0.944). Known limit: train tables keep only ~10%
+  # hard negatives (test 40%). A narrower list without those words kept 40% in train but left
+  # TF-IDF table at 0.952 (> 0.95); both runs are in the working report.
+  avoid_words: [python, check, make, sure, details, include, result, def, name, self, type, class,
+                column, table, note, refer, cite, see, print, data, total, final, np, use]
+
+p7:
+  # Stop rule (the team's limits; P7 reads them and never edits them). A baseline above a limit
+  # blocks the push: per BIPIA scenario for both baselines, and the TF-IDF result on Nemotron.
+  length_auc_stop: 0.70
+  tfidf_auc_stop: 0.95
+  fpr: 0.01                     # recall at 1% FPR (threshold = 99th pct of negatives' scores)
+  position_tolerance: {test: 0.02, train: 0.05, validation: 0.05}   # distance from one third
+  tfidf: {ngram: [1, 2], min_df: 5, max_features: 50000, C: 1.0}
 
 # Expected counts per step, copied from each portion's brief.
 # Shape: {step: {total: N, scenario: {...}, split: {...}, label: {...}, position: {...}}}

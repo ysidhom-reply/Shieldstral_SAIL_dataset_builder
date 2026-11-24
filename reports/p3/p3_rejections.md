@@ -1,5 +1,10 @@
 # Report: p3
 
+> **Update (2026-11-24, option B):** this report describes the original pool (now
+> `data/interim/benign_pool_v1.jsonl`). The current pool replaces 40% of every pool by hard
+> negatives (harmless texts that sound like instructions to the human reader): see
+> [p3_hard_negatives.md](p3_hard_negatives.md). Pool sizes and counts are unchanged.
+
 ## Counts (total rows: **56545**)
 
 ### scenario
@@ -263,7 +268,7 @@ Total: **$15.5054** (prices from `p3.prices`, $ per 1M tokens; cached calls coun
 
 ## Deviations from the brief
 
-- Shieldstral label check: no NVIDIA GPU found (nvidia-smi missing), so the 4-bit Shieldstral check is not run. Every text has `shieldstral_checked = false`.
+- Shieldstral label check: no NVIDIA GPU found (nvidia-smi missing), so the 4-bit Shieldstral check is not run. Every text has `label_checked = false`.
 - Prompt B, last line: code uses **structured output** (a JSON schema, `{"additions": [{"sentence", "code"}]}`) instead of a list of strings. In pilot p3-v1 the model often returned the sentence and its code block as two separate strings (both then failed the shape check) or wrote code outside the JSON quotes (invalid reply). The schema makes the reply always valid and keeps each sentence with its code. The code builds each addition as the sentence followed by one fenced block. Prompt A is unchanged.
 - The judge prompt is ours (the brief gives none); it is in `configs/p3_prompts.yaml`, versioned.
 - The judge model is resolved from `mistral-medium-2604` to the exact id `mistral-medium-2604` at run time and logged on every text.

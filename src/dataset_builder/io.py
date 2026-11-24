@@ -77,26 +77,12 @@ def pilot[T](
     return [items[i] for i in idx]
 
 
-def write_parquet(
-    path: Path,
-    rows: Sequence[BaseModel],
-    extra_columns: dict[str, Sequence[str]] | None = None,
-) -> int:
-    """Write Samples as parquet with an explicit schema (column order = model fields).
-
-    `extra_columns` (optional) adds interim-only string columns after the model fields, e.g.
-    `doc_id`; each must have one value per row. Writes to a temp file, then renames. Returns the
-    number of rows.
-    """
+def arrow_schema(model: type[BaseModel]) -> Any:
+    """The pyarrow schema of a model (column order = model fields): the shared contract types."""
     import types
     import typing
 
     import pyarrow as pa
-    import pyarrow.parquet as pq
-
-    if not rows:
-        raise ValueError("refusing to write an empty parquet file")
-    model = type(rows[0])
 
     def arrow_type(ann: Any) -> pa.DataType:
         args = [a for a in typing.get_args(ann) if a is not type(None)]
@@ -109,7 +95,26 @@ def write_parquet(
             return arrow_type(type(args[0]))
         return {str: pa.string(), int: pa.int64(), bool: pa.bool_(), float: pa.float64()}[ann]
 
-    schema = pa.schema([(n, arrow_type(f.annotation)) for n, f in model.model_fields.items()])
+    return pa.schema([(n, arrow_type(f.annotation)) for n, f in model.model_fields.items()])
+
+
+def write_parquet(
+    path: Path,
+    rows: Sequence[BaseModel],
+    extra_columns: dict[str, Sequence[str]] | None = None,
+) -> int:
+    """Write Samples as parquet with an explicit schema (column order = model fields).
+
+    `extra_columns` (optional) adds interim-only string columns after the model fields, e.g.
+    `doc_id`; each must have one value per row. Writes to a temp file, then renames. Returns the
+    number of rows.
+    """
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    if not rows:
+        raise ValueError("refusing to write an empty parquet file")
+    schema = arrow_schema(type(rows[0]))
     table = pa.Table.from_pylist([r.model_dump() for r in rows], schema=schema)
     for name, values in (extra_columns or {}).items():
         if len(values) != len(rows):

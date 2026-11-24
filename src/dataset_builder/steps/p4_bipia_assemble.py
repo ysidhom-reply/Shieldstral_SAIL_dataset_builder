@@ -8,6 +8,7 @@ and reports/p4/p4_composition.md.
 
 import json
 import logging
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 from statistics import median
@@ -56,19 +57,31 @@ def load_positives(cfg: Config) -> list[dict[str, Any]]:
 # --------------------------------------------------------------------------- picking
 
 
+_WORD = re.compile(r"[a-z]+")
+
+
+def avoid_score(text: str, avoid: frozenset[str]) -> int:
+    """Number of distinct over-represented benign words in a text (P7 v0 diagnostics)."""
+    return len(set(_WORD.findall(text.lower())) & avoid) if avoid else 0
+
+
 def pick(
     attack_len: int,
     candidates: list[dict[str, Any]],
     uses: Counter,
     window: float,
+    avoid: frozenset[str] = frozenset(),
 ) -> tuple[dict[str, Any], bool]:
     """(pool text, length_matched).
 
-    Order (team decision, option B): least used first, then a text within the length window,
-    then the closest length, then the id. Why: with the window first, the few texts close to a
-    long attack were picked again and again, and a reused text gives an identical negative row
-    (6,436 duplicates in test). With least used first and 25-text test pools, no text is reused
-    while an unused one remains. `length_matched` = the chosen text is within the window."""
+    Order: least used first, then a text within the length window, then the fewest
+    over-represented benign words (`p4.avoid_words`), then the closest length, then the id.
+    Why least used first (team decision): with the window first, the few texts close to a long
+    attack were picked again and again, and a reused text gives an identical negative row (6,436
+    duplicates in test). Why the avoided words (team decision, option (a) after P7 v0): TF-IDF
+    learned the style of the benign texts; this step only changes which unused, length-matched
+    text is chosen, so it needs no API call and keeps length matching and uniqueness.
+    `length_matched` = the chosen text is within the window."""
 
     def in_window(c: dict[str, Any]) -> bool:
         return abs(c["length"] - attack_len) <= window * attack_len
@@ -78,6 +91,7 @@ def pick(
         key=lambda c: (
             uses[c["benign_id"]],
             not in_window(c),
+            avoid_score(c.get("text", ""), avoid),
             abs(c["length"] - attack_len),
             c["benign_id"],
         ),
@@ -93,6 +107,7 @@ def build_negatives(
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[str]]:
     """Returns (negatives, pair records, failures)."""
     uses: Counter = Counter()
+    avoid = frozenset(w.lower() for w in cfg.p4.avoid_words)
     negatives, pairs, failures = [], [], []
     for pos in positives:
         key = (pos["doc_id"], pos["position"])
@@ -102,7 +117,7 @@ def build_negatives(
             continue
         window = cfg.p4.length_window[group_of(pos["scenario"])]
         attack_len = len(pos["injection_span"])
-        chosen, matched = pick(attack_len, cands, uses, window)
+        chosen, matched = pick(attack_len, cands, uses, window, avoid)
         uses[chosen["benign_id"]] += 1
         doc = docs[pos["doc_id"]]
         text, idx = insert(doc["document"], chosen["text"], pos["position"], doc["middle_index"])
@@ -126,7 +141,8 @@ def build_negatives(
             position=pos["position"],
             insert_index=idx,
             benign_id=chosen["benign_id"],
-            shieldstral_checked=bool(chosen.get("shieldstral_checked", False)),
+            benign_span=[idx, idx + len(chosen["text"])],
+            label_checked=bool(chosen.get("label_checked", False)),
         ).model_dump()
         negatives.append(neg | {"doc_id": pos["doc_id"], "benign_text": chosen["text"]})
         pairs.append(
@@ -531,6 +547,35 @@ def _sections(
     ]
 
 
+def _style_section(
+    pairs: list[dict[str, Any]], pool: dict[tuple[str, str], list[dict[str, Any]]]
+) -> list[tuple[str, str]]:
+    """Share of negatives whose benign text is a hard negative (P3 option B, if present)."""
+    style = {t["benign_id"]: t.get("style", "standard") for ts in pool.values() for t in ts}
+    if "hard_negative" not in style.values():
+        return []
+    c: Counter = Counter()
+    n: Counter = Counter()
+    for pr in pairs:
+        key = (pr["split"], pr["scenario"])
+        n[key] += 1
+        c[key] += style.get(pr["benign_id"]) == "hard_negative"
+    rows = [
+        [sp, s, n[(sp, s)], c[(sp, s)], _rate(c[(sp, s)], n[(sp, s)])]
+        for sp in SPLITS
+        for s in SCENARIOS
+        if n[(sp, s)]
+    ]
+    return [
+        (
+            "Hard negatives among the chosen benign texts (P3 option B)",
+            _table(["split", "scenario", "negatives", "hard negatives", "share"], rows)
+            + "\n\nAbout 40% of every pool are hard negatives (harmless texts that sound like "
+            "instructions to the human reader); P4's picking order is unchanged.",
+        )
+    ]
+
+
 # --------------------------------------------------------------------------- run
 
 
@@ -549,7 +594,7 @@ def run(cfg: Config | None = None, force: bool = False) -> dict[str, Any]:
     failures += check_pairs(
         positives, negatives, docs, attacks, AttackIndex.build(attacks, cfg.p3.attack_overlap_words)
     )
-    rows = [{c: p[c] for c in COLUMNS} for p in positives] + [
+    rows = [{c: p.get(c) for c in COLUMNS} for p in positives] + [
         {c: n[c] for c in COLUMNS} for n in negatives
     ]
     try:
@@ -562,7 +607,8 @@ def run(cfg: Config | None = None, force: bool = False) -> dict[str, Any]:
         rows,
         keys=("split", "scenario", "label", "position"),
         cfg=cfg,
-        sections=_sections(cfg, rows, positives, pairs, pool, docs, failures),
+        sections=_sections(cfg, rows, positives, pairs, pool, docs, failures)
+        + _style_section(pairs, pool),
         name=REPORT_NAME,
         extra={
             "p4_bipia": counts(rows),

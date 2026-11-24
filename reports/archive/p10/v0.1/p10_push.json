@@ -1,0 +1,201 @@
+{
+  "action": "verify",
+  "tag": "v0.1",
+  "configs": [
+    "bipia",
+    "nemotron"
+  ],
+  "files": {
+    "bipia/train": {
+      "rows": 19480,
+      "label": {
+        "0": 9740,
+        "1": 9740
+      },
+      "bytes": 9080203
+    },
+    "bipia/validation": {
+      "rows": 3520,
+      "label": {
+        "0": 1760,
+        "1": 1760
+      },
+      "bytes": 1644068
+    },
+    "bipia/test": {
+      "rows": 43100,
+      "label": {
+        "0": 21550,
+        "1": 21550
+      },
+      "bytes": 18953295
+    },
+    "nemotron/test": {
+      "rows": 2288,
+      "label": {
+        "0": 1144,
+        "1": 1144
+      },
+      "bytes": 449363
+    }
+  },
+  "card_sha256": "a7d2158755969d0f026397e738344365a59f0410a7951231664b86e77f1714fb",
+  "stage_dir": "data/interim/p10_stage",
+  "secrets_staged": [],
+  "push": {
+    "commit": "4b54a65b7b39ea91484b61d3e26434f967187802",
+    "commit_url": "https://huggingface.co/datasets/SAIL-Reply/ipi-twins/commit/4b54a65b7b39ea91484b61d3e26434f967187802",
+    "tag": "v0.1"
+  },
+  "verify": {
+    "tag": "v0.1",
+    "loaded": {
+      "bipia/train": {
+        "rows": 19480,
+        "columns": [
+          "sample_id",
+          "parent_id",
+          "source",
+          "split",
+          "source_split",
+          "scenario",
+          "instruct",
+          "query",
+          "document",
+          "label",
+          "answer",
+          "label_provenance",
+          "generation_method",
+          "attack_group",
+          "attack_name",
+          "position",
+          "insert_index",
+          "injection_span",
+          "protected_tokens",
+          "benign_id",
+          "label_checked",
+          "document_path",
+          "injection_vector",
+          "attack_category",
+          "goal_group",
+          "wrapper",
+          "wrapper_outside_span",
+          "sentence_repaired",
+          "victim_model"
+        ]
+      },
+      "bipia/validation": {
+        "rows": 3520,
+        "columns": [
+          "sample_id",
+          "parent_id",
+          "source",
+          "split",
+          "source_split",
+          "scenario",
+          "instruct",
+          "query",
+          "document",
+          "label",
+          "answer",
+          "label_provenance",
+          "generation_method",
+          "attack_group",
+          "attack_name",
+          "position",
+          "insert_index",
+          "injection_span",
+          "protected_tokens",
+          "benign_id",
+          "label_checked",
+          "document_path",
+          "injection_vector",
+          "attack_category",
+          "goal_group",
+          "wrapper",
+          "wrapper_outside_span",
+          "sentence_repaired",
+          "victim_model"
+        ]
+      },
+      "bipia/test": {
+        "rows": 43100,
+        "columns": [
+          "sample_id",
+          "parent_id",
+          "source",
+          "split",
+          "source_split",
+          "scenario",
+          "instruct",
+          "query",
+          "document",
+          "label",
+          "answer",
+          "label_provenance",
+          "generation_method",
+          "attack_group",
+          "attack_name",
+          "position",
+          "insert_index",
+          "injection_span",
+          "protected_tokens",
+          "benign_id",
+          "label_checked",
+          "document_path",
+          "injection_vector",
+          "attack_category",
+          "goal_group",
+          "wrapper",
+          "wrapper_outside_span",
+          "sentence_repaired",
+          "victim_model"
+        ]
+      },
+      "nemotron/test": {
+        "rows": 2288,
+        "columns": [
+          "sample_id",
+          "parent_id",
+          "source",
+          "split",
+          "source_split",
+          "scenario",
+          "instruct",
+          "query",
+          "document",
+          "label",
+          "answer",
+          "label_provenance",
+          "generation_method",
+          "attack_group",
+          "attack_name",
+          "position",
+          "insert_index",
+          "injection_span",
+          "protected_tokens",
+          "benign_id",
+          "label_checked",
+          "document_path",
+          "injection_vector",
+          "attack_category",
+          "goal_group",
+          "wrapper",
+          "wrapper_outside_span",
+          "sentence_repaired",
+          "victim_model"
+        ]
+      }
+    },
+    "remote_files": [
+      ".gitattributes",
+      "README.md",
+      "bipia/test.parquet",
+      "bipia/train.parquet",
+      "bipia/validation.parquet",
+      "nemotron/test.parquet"
+    ],
+    "private": true,
+    "errors": []
+  }
+}

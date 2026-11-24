@@ -1,0 +1,129 @@
+{
+  "total": 522,
+  "scenario": {
+    "code": 144,
+    "email": 198,
+    "table": 180
+  },
+  "split": {
+    "test": 282,
+    "train": 168,
+    "validation": 72
+  },
+  "position": {
+    "end": 174,
+    "middle": 174,
+    "start": 174
+  },
+  "cross": {
+    "keys": [
+      "scenario",
+      "split",
+      "position"
+    ],
+    "counts": {
+      "code | test | end": 24,
+      "code | test | middle": 24,
+      "code | test | start": 24,
+      "code | train | end": 16,
+      "code | train | middle": 16,
+      "code | train | start": 16,
+      "code | validation | end": 8,
+      "code | validation | middle": 8,
+      "code | validation | start": 8,
+      "email | test | end": 50,
+      "email | test | middle": 50,
+      "email | test | start": 50,
+      "email | train | end": 8,
+      "email | train | middle": 8,
+      "email | train | start": 8,
+      "email | validation | end": 8,
+      "email | validation | middle": 8,
+      "email | validation | start": 8,
+      "table | test | end": 20,
+      "table | test | middle": 20,
+      "table | test | start": 20,
+      "table | train | end": 32,
+      "table | train | middle": 32,
+      "table | train | start": 32,
+      "table | validation | end": 8,
+      "table | validation | middle": 8,
+      "table | validation | start": 8
+    }
+  },
+  "counts": {
+    "new": 522,
+    "restored": 0,
+    "replaced": 522,
+    "pools_short": 0
+  },
+  "generated": 708,
+  "cost_usd": {
+    "mistral-small-2603": 0.042715800000000005,
+    "mistral-medium-2604": 0.2334855
+  },
+  "judge_control": {
+    "n": 40,
+    "flagged": 40,
+    "rate": 1.0,
+    "missed": [],
+    "ok": true
+  },
+  "failures": [],
+  "reach": {
+    "email|start|1": 78,
+    "email|start|2": 78,
+    "email|start|3": 78,
+    "email|middle|1": 74,
+    "email|middle|2": 74,
+    "email|middle|3": 74,
+    "email|end|1": 82,
+    "email|end|2": 81,
+    "email|end|3": 81,
+    "table|start|1": 63,
+    "table|start|2": 63,
+    "table|start|3": 63,
+    "table|middle|1": 61,
+    "table|middle|2": 61,
+    "table|middle|3": 61,
+    "table|end|1": 62,
+    "table|end|2": 62,
+    "table|end|3": 62,
+    "code|start|1": 57,
+    "code|start|2": 52,
+    "code|start|3": 50,
+    "code|middle|1": 55,
+    "code|middle|2": 53,
+    "code|middle|3": 52,
+    "code|end|1": 54,
+    "code|end|2": 51,
+    "code|end|3": 51,
+    "email|start|4": 77,
+    "email|middle|4": 74,
+    "email|end|4": 81,
+    "table|start|4": 63,
+    "table|middle|4": 61,
+    "table|end|4": 62,
+    "code|start|4": 50,
+    "code|middle|4": 52,
+    "code|end|4": 51
+  },
+  "rejected": {
+    "email|end|1": 1,
+    "code|start|2": 2,
+    "code|middle|2": 1,
+    "code|start|1": 5,
+    "code|middle|1": 2,
+    "code|end|1": 3,
+    "email|end|4": 15,
+    "email|start|4": 11,
+    "email|middle|4": 8,
+    "table|start|4": 3,
+    "table|middle|4": 1,
+    "table|end|4": 2,
+    "code|start|4": 2,
+    "code|middle|4": 4,
+    "code|end|4": 3,
+    "email|start|3": 1
+  }
+}

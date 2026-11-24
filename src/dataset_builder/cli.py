@@ -15,7 +15,7 @@ import typer
 from dataset_builder import __version__
 from dataset_builder.config import DEFAULT_CONFIG, Config, load_config
 
-app = typer.Typer(help="Build the ipi-shieldstral dataset.", no_args_is_help=True)
+app = typer.Typer(help="Build the ipi-twins dataset.", no_args_is_help=True)
 
 
 @dataclass
@@ -107,11 +107,33 @@ def p3_benign_pool(
     max_rounds: Annotated[
         int | None, typer.Option(help="Regeneration rounds before stopping (default: config).")
     ] = None,
+    hard_negatives: Annotated[
+        bool,
+        typer.Option(
+            "--hard-negatives",
+            help="Option B: replace part of every pool with harmless instruction-like texts.",
+        ),
+    ] = False,
 ) -> None:
     """P3: benign text pool (Mistral). Pilot by default (20 documents); --full for all."""
     from dataset_builder.steps import p3_benign_pool as p3
 
     opts: RunOptions = ctx.obj
+    if hard_negatives:
+        from dataset_builder.steps import p3_hard_negatives as hn
+
+        out = hn.run(opts.cfg, is_pilot=opts.pilot)
+        c = out["counts"]
+        typer.echo(
+            f"hard negatives: {c.get('new', 0)} new, {c.get('replaced', 0)} replaced, "
+            f"{c.get('restored', 0)} put back -> {out['pool']}"
+        )
+        typer.echo(f"judge-v4 control: {out['control']['flagged']}/{out['control']['n']}")
+        typer.echo(f"report:    {out['report']}")
+        typer.echo(f"cost:      ${out['cost_usd']:.4f}")
+        if opts.pilot:
+            typer.echo("Pilot done. Read the report and the hand-read file before running --full.")
+        return
     out = p3.run(opts.cfg, force=opts.force, is_pilot=opts.pilot, max_rounds=max_rounds)
     typer.echo(f"accepted:  {out['accepted']} texts -> {out['pool']}")
     typer.echo(f"rejected:  {out['rejected']}")
@@ -156,6 +178,107 @@ def p4_bipia_assemble(ctx: typer.Context) -> None:
         typer.echo(f"{split + ':':<12} {path}")
     typer.echo(f"pairs:       {out['pairs']} ({out['fallback']} closest-length fallbacks)")
     typer.echo(f"report:      {out['report']}")
+
+
+@app.command("p6-textfooler")
+def p6_textfooler(ctx: typer.Context) -> None:
+    """P6: TextFooler test variants against ProtectAI (CPU). Pilot by default (20 samples)."""
+    from dataset_builder.steps import p6_textfooler as p6
+
+    opts: RunOptions = ctx.obj
+    out = p6.run(opts.cfg, force=opts.force, is_pilot=opts.pilot)
+    st = out["stats"]["all"]
+    typer.echo(
+        f"processed: {st['processed']}  kept: {st['kept']}  "
+        f"attack success: {st['succeeded']}/{st['succeeded'] + st['failed']}"
+    )
+    typer.echo(f"results: {out['results']}")
+    typer.echo(f"report:  {out['report']}")
+    typer.echo(f"cost:    ${out['cost_usd']:.4f}")
+    if opts.pilot:
+        pj = out["projection"]["total_hours"]
+        typer.echo(
+            "projected full run: "
+            + (f"{pj:.1f} h" if pj is not None else "unknown (a class had no kept variant)")
+        )
+        typer.echo("Pilot done. Read the report before running --full.")
+    else:
+        typer.echo(f"output:  {out['out']}")
+
+
+@app.command("p7-checks")
+def p7_checks(
+    ctx: typer.Context,
+    version: Annotated[str, typer.Option(help="v0, v1 or v2 (only v0 can run now).")] = "v0",
+) -> None:
+    """P7: data checks, shortcut baselines and diagnostics for one version (reads data/out only).
+    Exit 0 = PUSH ALLOWED, 1 = a data check failed, 2 = only a baseline limit is exceeded."""
+    from dataset_builder.steps import p7_checks as p7
+
+    out = p7.run(ctx.obj.cfg, version=version)
+    for c in out["checks"]:
+        typer.echo(f"{c['status']:<5} {c['config']:<16} {c['check']}")
+    b = out["baselines"]
+    for name, by_eval in b.items():
+        for ev, groups in by_eval.items():
+            typer.echo(f"{'':<5} baseline {name:<6} on {ev:<14} AUC {groups['all']['auc']:.3f}")
+    for s in out["stop"]:
+        typer.echo(f"LIMIT {s}")
+    typer.echo(f"report: {out['report']}")
+    typer.echo(out["status"])
+    raise typer.Exit(out["exit_code"])
+
+
+@app.command("p10-push")
+def p10_push(
+    ctx: typer.Context,
+    push: Annotated[
+        bool, typer.Option("--push", help="Upload to Hugging Face. Without it: dry-run only.")
+    ] = False,
+    tag: Annotated[str, typer.Option(help="Version tag created on the pushed commit.")] = "v0.1",
+    configs: Annotated[
+        str | None, typer.Option(help="Comma-separated configs (default: dataset.push_configs).")
+    ] = None,
+) -> None:
+    """P10: preflight, dataset card, staging and secret scan; uploads only with --push."""
+    from dataset_builder.steps import p10_push as p10
+
+    opts: RunOptions = ctx.obj
+    names = [c.strip() for c in configs.split(",")] if configs else None
+    out = p10.run(opts.cfg, do_push=push, tag=tag, configs=names)
+    for name, st in out["files"].items():
+        typer.echo(f"{name + ':':<22} {st['rows']:>7,} rows")
+    typer.echo(f"card:    {out['card']}")
+    typer.echo(f"staged:  {out['stage_dir']}")
+    typer.echo("secrets: none found in the staged files")
+    typer.echo(f"report:  {out['report']}")
+    if push:
+        typer.echo(f"pushed:  {opts.cfg.dataset.repo_id} @ {out['push']['commit']} (tag {tag})")
+        typer.echo(f"Next: uv run dataset-builder p10-verify --tag {tag}")
+    else:
+        typer.echo(
+            "Dry-run: nothing was uploaded. Read the card, then run with --push "
+            f"--tag {tag} to upload to {opts.cfg.dataset.repo_id}."
+        )
+
+
+@app.command("p10-verify")
+def p10_verify(
+    ctx: typer.Context,
+    tag: Annotated[str, typer.Option(help="Tag (or revision) to load.")] = "v0.1",
+    configs: Annotated[
+        str | None, typer.Option(help="Comma-separated configs (default: dataset.push_configs).")
+    ] = None,
+) -> None:
+    """P10: load every config and split from the Hub in a clean environment; check the counts."""
+    from dataset_builder.steps import p10_push as p10
+
+    names = [c.strip() for c in configs.split(",")] if configs else None
+    out = p10.run_verify(ctx.obj.cfg, tag=tag, configs=names)
+    for name, st in out["loaded"].items():
+        typer.echo(f"{name + ':':<22} {st['rows']:>7,} rows loaded")
+    typer.echo(f"private: {out['private']}  |  secrets in remote files: none")
+    typer.echo(f"PASSED. report: {out['report']}")
 
 
 @app.command()

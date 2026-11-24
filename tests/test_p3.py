@@ -252,8 +252,7 @@ def test_run_pilot_end_to_end(setup):
     per_pool = {(a["doc_id"], a["position"]) for a in pool}
     assert len(per_pool) == 9
     assert all(
-        a["judge_model"] == "mistral-medium-2604" and a["shieldstral_checked"] is False
-        for a in pool
+        a["judge_model"] == "mistral-medium-2604" and a["label_checked"] is False for a in pool
     )
     assert all("https://" not in a["text"] and "FLAG" not in a["text"] for a in pool)
     assert 1 in {a["round"] for a in pool} and max(a["round"] for a in pool) >= 2  # regenerated

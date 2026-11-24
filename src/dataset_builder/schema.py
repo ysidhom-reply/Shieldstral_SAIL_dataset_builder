@@ -24,7 +24,8 @@ BIPIA_FIELDS = (
     "position",
     "insert_index",
     "benign_id",
-    "shieldstral_checked",
+    "benign_span",
+    "label_checked",
 )
 NEMOTRON_FIELDS = (
     "document_path",
@@ -81,7 +82,8 @@ class Sample(BaseModel):
     injection_span: str | None = None
     protected_tokens: list[str] | None = None
     benign_id: str | None = None
-    shieldstral_checked: bool | None = None
+    benign_span: list[int] | None = None  # [start, end) of the inserted benign text in document
+    label_checked: bool | None = None
     document_path: str | None = None
     injection_vector: str | None = None
     attack_category: str | None = None
@@ -114,9 +116,13 @@ class Sample(BaseModel):
             if f not in allowed and getattr(self, f) is not None:
                 errors.append(f"{f} must be None for source={self.source}")
         if self.source == "bipia" and self.label == 1:
-            for f in ("benign_id", "shieldstral_checked"):
+            for f in ("benign_id", "benign_span", "label_checked"):
                 if getattr(self, f) is not None:
                     errors.append(f"{f} is only set on BIPIA negatives")
+        if self.benign_span is not None:
+            sp = self.benign_span
+            if len(sp) != 2 or not 0 <= sp[0] < sp[1] <= len(self.document):
+                errors.append(f"benign_span {sp} is not [start, end) inside the document")
         if errors:
             raise ValueError("; ".join(errors))
         return self

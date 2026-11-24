@@ -184,18 +184,28 @@ def _phrase(words: list[str], flags: int) -> re.Pattern | None:
     return re.compile(r"\b(" + "|".join(re.escape(w) for w in words) + r")\b", flags)
 
 
+def strip_allowed_urls(text: str, hosts: list[str]) -> str:
+    """Remove URLs (and bare host names) on the allowed hosts, e.g. example.com placeholders
+    (RFC 2606). Only the hard-negative filter profile sets hosts; the brief's profile has none."""
+    if not hosts:
+        return text
+    alt = "|".join(re.escape(h) for h in sorted(hosts, key=len, reverse=True))
+    return re.sub(rf"(https?://)?\b(?:{alt})\b[^\s'\"`)]*", " ", text, flags=re.IGNORECASE)
+
+
 def check_forbidden(text: str, scenario: str, p3: P3Cfg, attacks: AttackIndex) -> str | None:
     if _EMAIL.search(text):  # before the URL check: "jane@corp.com" also looks like a domain
         return "email address"
+    url_text = strip_allowed_urls(text, p3.allowed_url_hosts)
     if scenario == "code":
         parts = split_code(text)
         intro, code = parts if parts else (text, "")
         prose = intro
-        if _URL_CODE.search(text):
+        if _URL_CODE.search(url_text):
             return "URL"
     else:
         prose, code = text, ""
-        if _URL.search(text):
+        if _URL.search(url_text):
             return "URL"
     word_lists = [
         (_phrase(p3.assistant_words, re.IGNORECASE), "assistant wording"),

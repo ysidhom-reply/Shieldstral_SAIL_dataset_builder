@@ -29,7 +29,8 @@ CONTRACT_COLUMNS = [
     "injection_span",
     "protected_tokens",
     "benign_id",
-    "shieldstral_checked",
+    "benign_span",
+    "label_checked",
     "document_path",
     "injection_vector",
     "attack_category",
@@ -84,7 +85,7 @@ def test_valid_bipia_positive_and_negative():
         answer="no",
         generation_method="llm_benign_insertion",
         benign_id="b1",
-        shieldstral_checked=False,
+        label_checked=False,
     )
 
 

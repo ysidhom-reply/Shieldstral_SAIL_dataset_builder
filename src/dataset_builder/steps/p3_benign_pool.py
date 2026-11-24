@@ -296,6 +296,10 @@ class Pool:
     spares: list[tuple[str, dict]] = field(default_factory=list)
     target: int = 20  # texts this pool must reach (25 for extended test pools)
     mix: dict[str, int] | None = None  # size mix asked for (None = p3.mix)
+    # Texts already in the pool but not part of this run (hard-negative pass: the kept texts).
+    # They go into the "do not repeat" list and the duplicate check. Empty for normal P3 runs,
+    # so their prompts (and cache keys) are unchanged.
+    prior: list[str] = field(default_factory=list)
 
     @property
     def key(self) -> tuple[str, str]:
@@ -384,7 +388,7 @@ def generate_round(
             if not pool.accepted
             else bucket_request(request, have, dict(pool.mix or p3.mix), p3.mix_cap)
         )
-        existing = [a["text"] for a in pool.accepted]
+        existing = pool.prior + [a["text"] for a in pool.accepted]
         messages, truncated = build_messages(
             pool.doc, pool.position, request, counts, existing, prompts, cfg
         )
@@ -419,7 +423,7 @@ def generate_round(
             continue
         state.generated += len(texts)
         kept: list[tuple[str, dict]] = []
-        seen = [a["text"] for a in pool.accepted]
+        seen = pool.prior + [a["text"] for a in pool.accepted]
         targets = p3.lengths[group_of(s)]
         have = Counter(a["length_bucket"] for a in pool.accepted)
         for text in texts:
@@ -463,7 +467,7 @@ def judge_round(
     prompts: dict,
     cfg: Config,
     state: RunState,
-    shieldstral_checked: bool,
+    label_checked: bool,
     round_: int | str = 1,
 ) -> None:
     """Filter 4 (judge; texts per call set per scenario), then accept in order until each pool
@@ -513,7 +517,7 @@ def judge_round(
                 **jmeta,
                 "judge_verdict": "not addressed to the assistant",
                 "over_size_cap": bool(meta.get("over_size_cap", False)),
-                "shieldstral_checked": shieldstral_checked,
+                "label_checked": label_checked,
             }
         )
 
@@ -578,7 +582,7 @@ def top_up(
     prompts: dict,
     cfg: Config,
     state: RunState,
-    shieldstral_checked: bool,
+    label_checked: bool,
 ) -> None:
     """After the last round, fill pools still short with their own set-aside texts.
 
@@ -592,7 +596,7 @@ def top_up(
     short = [pl for pl in pools if len(pl.accepted) < pl.target]
     cands = []
     for pl in short:
-        seen = [a["text"] for a in pl.accepted]
+        seen = pl.prior + [a["text"] for a in pl.accepted]
         picked: list[tuple[str, dict]] = []
         for text, meta in pl.spares:
             if len(picked) >= pl.target - len(pl.accepted) + 2:  # +2 in case the judge flags one
@@ -605,7 +609,7 @@ def top_up(
         return
     before = {pl.key: len(pl.accepted) for pl in short}
     logger.info("P3 top-up: %d pools still short; using their set-aside texts", len(short))
-    judge_round(cands, client, judge_model, prompts, cfg, state, shieldstral_checked, "top-up")
+    judge_round(cands, client, judge_model, prompts, cfg, state, label_checked, "top-up")
     for pl in short:
         added = len(pl.accepted) - before[pl.key]
         if added:
@@ -619,7 +623,7 @@ def extend_pools(
     prompts: dict,
     cfg: Config,
     state: RunState,
-    shieldstral_checked: bool,
+    label_checked: bool,
 ) -> None:
     """Extend the pools of some splits/scenarios to `p3.extension.target_n` texts.
 
@@ -647,9 +651,9 @@ def extend_pools(
         label = f"ext{k}"
         logger.info("P3 extension round %d: %d pools need texts", k, len(todo))
         cands = generate_round(todo, label, client, prompts, cfg, state)
-        judge_round(cands, client, judge_model, prompts, cfg, state, shieldstral_checked, label)
+        judge_round(cands, client, judge_model, prompts, cfg, state, label_checked, label)
     if cfg.p3.top_up_from_spares:
-        top_up(chosen, client, judge_model, prompts, cfg, state, shieldstral_checked)
+        top_up(chosen, client, judge_model, prompts, cfg, state, label_checked)
     state.extended = {pl.key: len(pl.accepted) - before[pl.key] for pl in chosen}
 
 
@@ -842,7 +846,7 @@ def run(
 
     gen_model = client.resolve_model(p3.generator.model)
     judge = client.resolve_model(cfg.benign_check.judge_model)
-    shieldstral_checked, shieldstral_note = shieldstral_available(cfg)
+    label_checked, shieldstral_note = shieldstral_available(cfg)
 
     state = RunState(attacks=AttackIndex.build(attacks, p3.attack_overlap_words))
     pools = [Pool(d, p, target=p3.n) for d in docs for p in POSITIONS]
@@ -852,11 +856,11 @@ def run(
             break
         logger.info("P3 round %d: %d pools need texts", round_, len(todo))
         cands = generate_round(todo, round_, client, prompts, cfg, state)
-        judge_round(cands, client, judge["id"], prompts, cfg, state, shieldstral_checked, round_)
+        judge_round(cands, client, judge["id"], prompts, cfg, state, label_checked, round_)
     if p3.top_up_from_spares:
-        top_up(pools, client, judge["id"], prompts, cfg, state, shieldstral_checked)
+        top_up(pools, client, judge["id"], prompts, cfg, state, label_checked)
     if p3.extension.target_n > p3.n:
-        extend_pools(pools, client, judge["id"], prompts, cfg, state, shieldstral_checked)
+        extend_pools(pools, client, judge["id"], prompts, cfg, state, label_checked)
     if p3.judge_control:
         state.control = judge_control_check(client, judge["id"], attacks, prompts, cfg)
 
@@ -1552,7 +1556,7 @@ def _sections(
             "\n".join(
                 [
                     f"- Shieldstral label check: {shieldstral_note}. Every text has "
-                    "`shieldstral_checked = false`.",
+                    "`label_checked = false`.",
                     "- Prompt B, last line: code uses **structured output** (a JSON schema, "
                     '`{"additions": [{"sentence", "code"}]}`) instead of a list of strings. '
                     "In pilot p3-v1 the model often returned the sentence and its code block as "

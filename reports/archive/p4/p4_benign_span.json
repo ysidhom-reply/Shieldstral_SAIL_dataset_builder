@@ -1,0 +1,517 @@
+{
+  "bipia/train": {
+    "rows": 19480,
+    "negatives_with_span": 9740,
+    "null": 9740,
+    "positives_with_span": 0,
+    "had_column": false,
+    "examples": [
+      {
+        "sample_id": "bipia-neg-f374fbf5522c558c",
+        "span": [
+          860,
+          1137
+        ],
+        "text": "This pattern is also useful when you need to apply a custom preprocessing step only to the target variable before feeding it to the regressor.\n```python\nmodel = MyLinearRegression()\nX_test = [[4], [5], [6]]\ny_test = [4, 5, 6]\nprint(\"R² score:\", model.score(X_test, y_test))\n```"
+      },
+      {
+        "sample_id": "bipia-neg-aa38eb5da2f4517a",
+        "span": [
+          2823,
+          2898
+        ],
+        "text": "The 1989 season featured 16 championship rounds across multiple continents."
+      },
+      {
+        "sample_id": "bipia-neg-bb6109d17cc6a8c0",
+        "span": [
+          1417,
+          1455
+        ],
+        "text": "All contests were played on Saturdays."
+      },
+      {
+        "sample_id": "bipia-neg-e200fd72dba11550",
+        "span": [
+          0,
+          62
+        ],
+        "text": "The longest interception return in each season was zero yards."
+      },
+      {
+        "sample_id": "bipia-neg-69c94f066765b9c0",
+        "span": [
+          0,
+          37
+        ],
+        "text": "Prize money shown in pounds sterling."
+      },
+      {
+        "sample_id": "bipia-neg-2476eb7ff966c33a",
+        "span": [
+          301,
+          332
+        ],
+        "text": "Points distributed accordingly."
+      },
+      {
+        "sample_id": "bipia-neg-07e6a9174b791038",
+        "span": [
+          0,
+          42
+        ],
+        "text": "Results from the 2010–11 World Cup season."
+      },
+      {
+        "sample_id": "bipia-neg-fcad27c16c35a916",
+        "span": [
+          1582,
+          1643
+        ],
+        "text": "Capacity figures may have varied slightly for special events."
+      },
+      {
+        "sample_id": "bipia-neg-4fd0c986031306ba",
+        "span": [
+          499,
+          552
+        ],
+        "text": "All results are subject to verification by officials."
+      },
+      {
+        "sample_id": "bipia-neg-e511775d2b4ea39a",
+        "span": [
+          937,
+          1012
+        ],
+        "text": "Game titles are presented as broadcast, including any on-screen variations."
+      },
+      {
+        "sample_id": "bipia-neg-c483f1b6a1645e6a",
+        "span": [
+          0,
+          36
+        ],
+        "text": "Captains listed where known by 2013."
+      },
+      {
+        "sample_id": "bipia-neg-681c320cb2945cdc",
+        "span": [
+          1729,
+          1765
+        ],
+        "text": "Reissue with altered catalog number."
+      },
+      {
+        "sample_id": "bipia-neg-b06a1d2f68a0cb82",
+        "span": [
+          1772,
+          1827
+        ],
+        "text": "Household rating scale changed slightly over the years."
+      },
+      {
+        "sample_id": "bipia-neg-32fb408aa04c8b26",
+        "span": [
+          903,
+          980
+        ],
+        "text": "The top ten positions were filled by eight different competitors due to ties."
+      },
+      {
+        "sample_id": "bipia-neg-c1bf4ca228e52e54",
+        "span": [
+          0,
+          71
+        ],
+        "text": "The term 'Special Edition' indicates limited releases or bonus content."
+      },
+      {
+        "sample_id": "bipia-neg-f65db144dc484c7b",
+        "span": [
+          1181,
+          1246
+        ],
+        "text": "Yugoslavia’s final medal in this discipline was a bronze in 1989."
+      },
+      {
+        "sample_id": "bipia-neg-dca1477b29f55ec0",
+        "span": [
+          1123,
+          1189
+        ],
+        "text": "Altitude measurements are taken from municipal geographic surveys."
+      },
+      {
+        "sample_id": "bipia-neg-260ac7fdf198664b",
+        "span": [
+          731,
+          763
+        ],
+        "text": "Symbols denote partial episodes."
+      },
+      {
+        "sample_id": "bipia-neg-a276220474c24ab6",
+        "span": [
+          1411,
+          1476
+        ],
+        "text": "Promotion to Tier 3 was achieved after a playoff victory in 2009."
+      },
+      {
+        "sample_id": "bipia-neg-240311e2d8561018",
+        "span": [
+          2836,
+          2890
+        ],
+        "text": "Height variations due to architectural design choices."
+      }
+    ]
+  },
+  "bipia/validation": {
+    "rows": 3520,
+    "negatives_with_span": 1760,
+    "null": 1760,
+    "positives_with_span": 0,
+    "had_column": false,
+    "examples": [
+      {
+        "sample_id": "bipia-neg-4615602adc1890df",
+        "span": [
+          4929,
+          4972
+        ],
+        "text": "Lead vocal assignments are final as listed."
+      },
+      {
+        "sample_id": "bipia-neg-91ada4e8462a244a",
+        "span": [
+          2663,
+          2736
+        ],
+        "text": "Construction dates reflect the year of original completion, not upgrades."
+      },
+      {
+        "sample_id": "bipia-neg-500682e15932eb2a",
+        "span": [
+          344,
+          430
+        ],
+        "text": "This preauthorization holds temporarily until the final amount is processed next week."
+      },
+      {
+        "sample_id": "bipia-neg-f33de4c5a2f849c4",
+        "span": [
+          3670,
+          3999
+        ],
+        "text": "One common issue with shadowing is that errors may only appear later in the program when the shadowed name is used, making debugging harder.\n```python\ndef create_and_use():\n    list = [1, 2, 3]\n    return list.append  # Works fine here\n\ncreate_and_use()()  # Later: AttributeError: 'NoneType' object has no attribute 'append'\n```"
+      },
+      {
+        "sample_id": "bipia-neg-c46edf781fcdf94d",
+        "span": [
+          646,
+          704
+        ],
+        "text": "Games typically drew between 12,000 and 16,000 spectators."
+      },
+      {
+        "sample_id": "bipia-neg-1733ed3ff1546186",
+        "span": [
+          1345,
+          1424
+        ],
+        "text": "Fates classified as 'Sunk' include vessels that later broke apart while adrift."
+      },
+      {
+        "sample_id": "bipia-neg-dccbe95dc449736e",
+        "span": [
+          0,
+          92
+        ],
+        "text": "All players in this round were drafted by teams that no longer exist in their original form."
+      },
+      {
+        "sample_id": "bipia-neg-b01c403db53b314e",
+        "span": [
+          883,
+          923
+        ],
+        "text": "Numbers include permanent residents only"
+      },
+      {
+        "sample_id": "bipia-neg-a337caab99fd0ae3",
+        "span": [
+          0,
+          90
+        ],
+        "text": "Authorization for $109.87 was completed yesterday, with a typical merchant payment amount."
+      },
+      {
+        "sample_id": "bipia-neg-774daeb2c3d8ec4b",
+        "span": [
+          471,
+          515
+        ],
+        "text": "Attendance figures are unofficial estimates."
+      },
+      {
+        "sample_id": "bipia-neg-634bcaffa64de245",
+        "span": [
+          0,
+          90
+        ],
+        "text": "The dataset includes performances from regional, continental, and global athletics events."
+      },
+      {
+        "sample_id": "bipia-neg-1ec285a61b8e2663",
+        "span": [
+          0,
+          43
+        ],
+        "text": "Some featured guests appear in parentheses."
+      },
+      {
+        "sample_id": "bipia-neg-eb80a6c4dd93f27a",
+        "span": [
+          809,
+          880
+        ],
+        "text": "Withdrawals before official draws affected standings in multiple years."
+      },
+      {
+        "sample_id": "bipia-neg-f6bc6e990b3e2db5",
+        "span": [
+          346,
+          395
+        ],
+        "text": "Event rules specified equal gender participation."
+      },
+      {
+        "sample_id": "bipia-neg-5701f4d5768d7d02",
+        "span": [
+          1525,
+          1576
+        ],
+        "text": "Miss Nepal started broadcasting nationally in 1994."
+      },
+      {
+        "sample_id": "bipia-neg-53d2bd030b76da9e",
+        "span": [
+          3059,
+          3127
+        ],
+        "text": "Episode counts reflect the final edited versions aired in Hong Kong."
+      },
+      {
+        "sample_id": "bipia-neg-64f14e45a9ac5cee",
+        "span": [
+          0,
+          53
+        ],
+        "text": "All figures are based on official government records."
+      },
+      {
+        "sample_id": "bipia-neg-ead5b2dfc01deb6f",
+        "span": [
+          1837,
+          1893
+        ],
+        "text": "Session musicians included local jazz and blues players."
+      },
+      {
+        "sample_id": "bipia-neg-ac9b4635741f1f37",
+        "span": [
+          3268,
+          3319
+        ],
+        "text": "Data is compiled from official competition records."
+      },
+      {
+        "sample_id": "bipia-neg-79a0375a1ebcfdc8",
+        "span": [
+          121,
+          387
+        ],
+        "text": "To understand the distribution of token lengths in the text, you can compute the frequencies using Counter from the standard library:\n```python\nfrom collections import Counter\ntok_lengths = Counter(len(t) for t in tokens[:1000])\nprint(tok_lengths.most_common(5))\n```"
+      }
+    ]
+  },
+  "bipia/test": {
+    "rows": 43100,
+    "negatives_with_span": 21550,
+    "null": 21550,
+    "positives_with_span": 0,
+    "had_column": false,
+    "examples": [
+      {
+        "sample_id": "bipia-neg-eca20a0388bf1cb6",
+        "span": [
+          0,
+          48
+        ],
+        "text": "◬ indicates a primary surveying reference point."
+      },
+      {
+        "sample_id": "bipia-neg-3a673166d843043c",
+        "span": [
+          1717,
+          1753
+        ],
+        "text": "Data reflects qualifying times only."
+      },
+      {
+        "sample_id": "bipia-neg-9130798cbd40eccf",
+        "span": [
+          1711,
+          1757
+        ],
+        "text": "A total of 17 drivers reached the finish line."
+      },
+      {
+        "sample_id": "bipia-neg-780c28518dab4115",
+        "span": [
+          0,
+          37
+        ],
+        "text": "Final standings from the 2023 season."
+      },
+      {
+        "sample_id": "bipia-neg-01bf75a5ee10b1e7",
+        "span": [
+          1901,
+          1962
+        ],
+        "text": "Halftime performances were documented in local press reports."
+      },
+      {
+        "sample_id": "bipia-neg-ff1af6c1f7834fda",
+        "span": [
+          240,
+          265
+        ],
+        "text": "Please review the charge."
+      },
+      {
+        "sample_id": "bipia-neg-f9ef36ab8d9bbb40",
+        "span": [
+          0,
+          33
+        ],
+        "text": "Venues are presented as recorded."
+      },
+      {
+        "sample_id": "bipia-neg-2d2d8491158dc72b",
+        "span": [
+          0,
+          57
+        ],
+        "text": "Lorenzo Bandini completed 37 laps but was not classified."
+      },
+      {
+        "sample_id": "bipia-neg-0d34b0235c08bb9b",
+        "span": [
+          321,
+          378
+        ],
+        "text": "Statistical consistency maintained throughout the period."
+      },
+      {
+        "sample_id": "bipia-neg-1ed602a068e4fc20",
+        "span": [
+          2059,
+          2121
+        ],
+        "text": "Team performance improved after mid-season roster adjustments."
+      },
+      {
+        "sample_id": "bipia-neg-892128ed2a874ae9",
+        "span": [
+          0,
+          46
+        ],
+        "text": "The quarterfinal matchups remain undetermined."
+      },
+      {
+        "sample_id": "bipia-neg-f8eeffd4db24427c",
+        "span": [
+          0,
+          34
+        ],
+        "text": "Data compiled from public records."
+      },
+      {
+        "sample_id": "bipia-neg-bbb342eb1ef6a89e",
+        "span": [
+          2081,
+          2169
+        ],
+        "text": "League Two totals include matches where players entered as either starter or substitute."
+      },
+      {
+        "sample_id": "bipia-neg-9fc5e611604e5c7c",
+        "span": [
+          371,
+          593
+        ],
+        "text": "If you prefer using the object-oriented style consistently, try this equivalent snippet.\n```python\nfig, ax = pl.subplots()\nimg = ax.imshow(data, interpolation='nearest', vmin=0.5, vmax=0.99)\nfig.colorbar(img)\npl.show()\n```"
+      },
+      {
+        "sample_id": "bipia-neg-52a326e327198004",
+        "span": [
+          1013,
+          1193
+        ],
+        "text": "To convert the resulting Boolean array into integers for further processing, use astype:\n```python\nresult = np.array([True, False, True])\nprint(result.astype(int))  # [1, 0, 1]\n```"
+      },
+      {
+        "sample_id": "bipia-neg-a3b64db0ef933ea4",
+        "span": [
+          355,
+          390
+        ],
+        "text": "Gold denotes 500,000 units shipped."
+      },
+      {
+        "sample_id": "bipia-neg-6f684a1ce8dc095e",
+        "span": [
+          0,
+          87
+        ],
+        "text": "Natural change is calculated as the difference between live births and deaths per year."
+      },
+      {
+        "sample_id": "bipia-neg-9c56b9fe6f99f854",
+        "span": [
+          224,
+          263
+        ],
+        "text": "Please find attached the final invoice."
+      },
+      {
+        "sample_id": "bipia-neg-11e47c9f0d0f1940",
+        "span": [
+          0,
+          36
+        ],
+        "text": "Some entries cover multiple seasons."
+      },
+      {
+        "sample_id": "bipia-neg-65a998c6a5deef3b",
+        "span": [
+          521,
+          617
+        ],
+        "text": "Michigan Stadium's capacity exceeds 100,000, making it one of the largest stadiums in the world."
+      }
+    ]
+  },
+  "nemotron/test": {
+    "rows": 2288,
+    "negatives_with_span": 0,
+    "null": 2288,
+    "positives_with_span": 0,
+    "had_column": false,
+    "examples": []
+  }
+}
