@@ -223,17 +223,6 @@ def test_secret_in_staged_file_stops_the_run(ready, monkeypatch):
         p10.run(ready)
 
 
-def test_filter_rates_from_report():
-    p3 = {
-        "reach": {"a|start|1": 10, "b|end|1": 5, "a|start|2": 12},
-        "rejected": {"a|start|1": 2, "b|end|1": 1, "a|start|2": 3},
-    }
-    rows = {r["name"]: (r["checked"], r["rejected"]) for r in p10.filter_rates(p3)}
-    assert rows["shape"] == (15, 3)
-    assert rows["forbidden content"] == (12, 3)
-    assert rows["judge"] == (0, 0)
-
-
 class FakeApi:
     def __init__(self, private=True, tags=()):
         self.private, self.tags, self.calls = private, list(tags), []
@@ -250,6 +239,10 @@ class FakeApi:
 
     def create_tag(self, repo, **kw):
         self.calls.append(("tag", kw))
+
+    def upload_file(self, **kw):
+        self.calls.append(("upload_file", kw))
+        return SimpleNamespace(oid="cafe01", commit_url="https://example/card")
 
 
 def test_push_uploads_and_tags(ready):
@@ -382,20 +375,46 @@ def test_compare_files_finds_changed_and_missing_files(tmp_path):
     assert diff == ["x/one.parquet: missing in second", "x/two.parquet: content differs"]
 
 
-def test_card_has_hard_negatives_and_p7_sections_when_the_reports_exist(ready):
-    (ready.paths.reports / "p3" / "p3_hard_negatives.json").write_text(
-        json.dumps(
-            {
-                "counts": {"new": 7, "replaced": 7},
-                "reach": {"table|start|1": 10, "table|start|4": 8},
-                "rejected": {"table|start|4": 1},
-                "judge_control": {"n": 40, "flagged": 40},
-                "failures": [],
-            }
-        ),
-        encoding="utf-8",
-    )
+def test_card_is_short_and_has_sources_splits_and_how_it_was_built(ready):
     card = p10.run(ready)["card"].read_text(encoding="utf-8")
-    assert "## Hard negatives" in card and "7 hard negatives replaced" in card
-    assert "## Checks and shortcut baselines" in card and "0.600" in card
-    assert "Language Translation" in card  # known limit kept
+    assert len(card.splitlines()) < 160
+    for heading in (
+        "## Sources",
+        "## Splits",
+        "### `bipia`",
+        "## How `bipia` was built",
+        "## Columns",
+        "## Licences and credit",
+    ):
+        assert heading in card
+    assert "Split by document" in card and "sampled" in card  # the split choices
+    assert "| split | documents | attacks per document | rows | email | table | code |" in card
+    assert "Mistral Small" in card and "Mistral Medium" in card  # synthetic benign texts
+    for gone in ("<details>", "Prompt A", "rejection rate", "recall at 1% FPR"):
+        assert gone not in card  # prompts, filter tables and baselines stay out of the card
+    assert "## Known limits" not in card
+
+
+def test_card_only_uploads_just_the_readme_and_never_tags(ready):
+    api = FakeApi(tags=["v0"])
+    out = p10.run(ready, version="v0", do_push=True, card_only=True, api=api)
+    assert out["uploads"] == [] and out["card_push"]["tag_moved"] is False
+    ((kind, up),) = api.calls  # one upload_file call: no upload_folder, no create_tag
+    assert kind == "upload_file" and up["path_in_repo"] == "README.md"
+    staged = sorted(
+        p.relative_to(out["stage_dir"]).as_posix()
+        for p in out["card"].parent.rglob("*")
+        if p.is_file()
+    )
+    assert staged == ["README.md"]  # no parquet file is even staged
+    assert "Only `README.md` was uploaded" in out["report"].read_text("utf-8")
+
+
+def test_card_only_needs_the_tag_a_private_repo_and_the_gate(ready):
+    with pytest.raises(RuntimeError, match="does not exist"):
+        p10.run(ready, do_push=True, card_only=True, api=FakeApi(tags=[]))
+    with pytest.raises(RuntimeError, match="not private"):
+        p10.run(ready, do_push=True, card_only=True, api=FakeApi(private=False, tags=["v0"]))
+    _write_p7(ready, status="PUSH BLOCKED", exit_code=2)
+    with pytest.raises(p10.PushBlockedError):
+        p10.run(ready, do_push=True, card_only=True, api=FakeApi(tags=["v0"]))

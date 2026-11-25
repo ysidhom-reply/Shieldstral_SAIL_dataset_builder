@@ -1,14 +1,11 @@
 {
-  "action": "verify",
+  "action": "card update",
   "version": "v0",
   "configs": [
     "bipia",
     "nemotron"
   ],
-  "uploads": [
-    "bipia",
-    "nemotron"
-  ],
+  "uploads": [],
   "files": {
     "bipia/train": {
       "rows": 19480,
@@ -48,7 +45,7 @@
     "status": "PUSH ALLOWED",
     "reason": ""
   },
-  "card_sha256": "53407d5ff136240f430c63331549e5df88bbe56e906da1159abf28b40bfef3af",
+  "card_sha256": "8a4b0a60915c0d4d48db97a611421bf14254c03053f3744254c89158ec33a077",
   "stage_dir": "data/interim/p10_stage",
   "secrets_staged": [],
   "push": {
@@ -211,5 +208,13 @@
     "private": true,
     "v0_unchanged": null,
     "errors": []
+  },
+  "card_push": {
+    "commit": "ef056001762195821ba433ed302dc961d6319fae",
+    "commit_url": "https://huggingface.co/datasets/SAIL-Reply/ipi-twins/commit/ef056001762195821ba433ed302dc961d6319fae",
+    "files": [
+      "README.md"
+    ],
+    "tag_moved": false
   }
 }

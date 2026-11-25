@@ -5,8 +5,8 @@
 - Repository: `SAIL-Reply/ipi-twins` (private: True)
 - Version / tag: `v0`
 - Configs in this version: `bipia`, `nemotron`
-- Uploaded by this push: `bipia`, `nemotron` and the card
-- Last action: verify
+- Uploaded by this push:  and the card
+- Last action: card update
 
 ## P7 gate
 
@@ -25,7 +25,7 @@ Step reports have no failed checks; every file has the 30 schema columns in orde
 
 ## Dataset card
 
-`README.md`, sha256 `53407d5ff136240f…`, staged in `data/interim/p10_stage`; a copy is kept in `reports/p10/p10_dataset_card_v0.md`.
+`README.md`, sha256 `8a4b0a60915c0d4d…`, staged in `data/interim/p10_stage`; a copy is kept in `reports/p10/p10_dataset_card_v0.md`.
 
 ## Secret scan
 
@@ -36,6 +36,13 @@ Staged files: **none found** (token patterns and the actual `HF_TOKEN` / `MISTRA
 - Commit: `699b21620ecad6bd33a4333cb05c92018f8f1462`
 - Tag: `v0`
 - URL: https://huggingface.co/datasets/SAIL-Reply/ipi-twins/commit/699b21620ecad6bd33a4333cb05c92018f8f1462
+
+## Card update
+
+Only `README.md` was uploaded, as a new commit on `main`. No data file was sent and the tag `v0` was not moved.
+
+- Commit: `ef056001762195821ba433ed302dc961d6319fae`
+- URL: https://huggingface.co/datasets/SAIL-Reply/ipi-twins/commit/ef056001762195821ba433ed302dc961d6319fae
 
 ## Verify (clean environment, `load_dataset` at revision `v0`)
 

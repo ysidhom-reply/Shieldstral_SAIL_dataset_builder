@@ -238,16 +238,27 @@ def p10_push(
     version: Annotated[
         str, typer.Option("--version", help="v0 (bipia + nemotron) or v1 (+ bipia_textfooler).")
     ] = "v0",
+    card_only: Annotated[
+        bool,
+        typer.Option(
+            "--card-only",
+            help="With --push: upload only README.md as a new commit on main (no data, no tag).",
+        ),
+    ] = False,
 ) -> None:
     """P10: preflight, dataset card, staging, secret scan and the P7 gate for one version.
     Uploads only with --push, and only if P7 says PUSH ALLOWED for that version."""
     from dataset_builder.steps import p10_push as p10
 
     opts: RunOptions = ctx.obj
-    out = p10.run(opts.cfg, version=version, do_push=push)
+    out = p10.run(opts.cfg, version=version, do_push=push, card_only=card_only)
     for name, st in out["files"].items():
         typer.echo(f"{name + ':':<26} {st['rows']:>7,} rows")
-    typer.echo(f"uploads:  {', '.join(out['uploads'])} + the card (other configs untouched)")
+    typer.echo(
+        "uploads:  "
+        + (", ".join(out["uploads"]) + " + the card" if out["uploads"] else "the card only")
+        + " (other configs untouched)"
+    )
     typer.echo(f"card:     {out['card']}")
     typer.echo(f"staged:   {out['stage_dir']}")
     typer.echo("secrets:  none found in the staged files")
@@ -256,7 +267,12 @@ def p10_push(
         + (f" ({out['gate']['reason']})" if out["gate"]["reason"] else "")
     )
     typer.echo(f"report:   {out['report']}")
-    if push:
+    if push and card_only:
+        typer.echo(
+            f"card updated: {opts.cfg.dataset.repo_id} @ {out['card_push']['commit']} "
+            f"(README.md only, tag {version} not moved)"
+        )
+    elif push:
         typer.echo(
             f"pushed:   {opts.cfg.dataset.repo_id} @ {out['push']['commit']} (tag {version})"
         )

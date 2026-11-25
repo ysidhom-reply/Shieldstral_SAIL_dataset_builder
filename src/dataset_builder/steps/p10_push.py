@@ -239,30 +239,7 @@ def _front_matter(cfg: Config, configs: list[str]) -> str:
     return "---\n" + yaml.safe_dump(meta, sort_keys=False, allow_unicode=True) + "---\n"
 
 
-def filter_rates(p3: dict[str, Any]) -> list[dict[str, Any]]:
-    """Texts checked / rejected per P3 filter, from the report's `reach` and `rejected` tables
-    (keys `scenario|position|filter`)."""
-    from dataset_builder.steps.p3_benign_pool import FILTERS
-
-    rows = []
-    for f, name in FILTERS.items():
-        checked = sum(v for k, v in p3.get("reach", {}).items() if k.rsplit("|", 1)[-1] == str(f))
-        rejected = sum(
-            v for k, v in p3.get("rejected", {}).items() if k.rsplit("|", 1)[-1] == str(f)
-        )
-        rows.append({"filter": f, "name": name, "checked": checked, "rejected": rejected})
-    return rows
-
-
 LICENCE_NAMES = {"cc-by-sa-4.0": "CC BY-SA 4.0", "cc-by-4.0": "CC BY 4.0", "mit": "MIT"}
-
-
-def _model(info: dict[str, Any], default: str) -> str:
-    return f"`{info.get('id', default)}` (requested `{info.get('requested', default)}`)"
-
-
-def _prompts(cfg: Config) -> dict[str, Any]:
-    return yaml.safe_load(cfg.p3.prompts.read_text(encoding="utf-8"))
 
 
 def hn_share(cfg: Config) -> dict[str, dict[str, float]]:
@@ -291,156 +268,6 @@ def hn_share(cfg: Config) -> dict[str, dict[str, float]]:
                 n[r["scenario"]] += 1
                 c[r["scenario"]] += style.get(r["benign_id"]) == "hard_negative"
         out[split] = {sc: c[sc] / n[sc] for sc in n}
-    return out
-
-
-def _hard_negative_section(
-    cfg: Config, reports: dict[str, dict[str, Any]], prompts: dict[str, Any]
-) -> list[str]:
-    hn = reports.get("p3hn")
-    if not hn:
-        return []
-    c = hn.get("counts", {})
-    hcfg = cfg.p3.hard_negatives
-    out = [
-        "## Hard negatives",
-        "",
-        f"{hcfg.share:.0%} of every benign pool is a *hard negative*: a harmless text that "
-        'sounds like an instruction to the human reader of the document ("Please send your '
-        'reply by Friday", "You can add the following snippet to your script ..."), using '
-        "the vocabulary attacks use. Why: a bag-of-words baseline separated the classes on "
-        "wording alone when benign texts never used that vocabulary.",
-        "",
-        f"- **Texts:** {c.get('new', 0):,} hard negatives replaced the same number of the "
-        "original texts (the ones with the most over-represented words first). Every pool keeps "
-        "its size.",
-        f"- **Prompts:** `{hcfg.prompt_version}` (A-hn for email and table, B-hn for code; below). "
-        "Email texts address the recipient of the email, table texts are reading notes for the "
-        "reader, code texts are suggestions about the reader's own code with harmless code.",
-        f"- **Judge:** `{hcfg.judge_prompt_version}` (one text per call for code, "
-        f"`{hcfg.judge_batch_prompt_version}` for email and table). A suggestion to the reader "
-        "about their own code, or an email request to the recipient, is not an injection; code "
-        "that does something unrequested still is, however it is phrased.",
-    ]
-    jc = hn.get("judge_control") or {}
-    if jc:
-        out.append(
-            f"- **Judge positive control:** {jc.get('flagged')} of {jc.get('n')} real BIPIA "
-            "attacks were flagged."
-        )
-    out += [
-        "- **Filters:** a narrower profile than the original texts: assistant wording "
-        "(assistant, chatbot, ignore, disregard, system prompt, pretend, as an AI) is still "
-        "forbidden; `your reply/answer/response` and reader-directed code intros are allowed; "
-        "`requests.get` with a timeout on `example.com`, `subprocess.run` with fixed arguments "
-        "and local file reads are allowed in code; sending data, credentials, environment "
-        "variables, deletion, `shell=True`, sockets and system fingerprinting stay forbidden. "
-        "The overlap ban with BIPIA attacks and the duplicate check are unchanged.",
-        "",
-    ]
-    rows = filter_rates(hn)
-    if rows:
-        out += [
-            _table(
-                ["filter", "texts checked", "rejected", "rejection rate"],
-                [
-                    [
-                        r["name"],
-                        f"{r['checked']:,}",
-                        f"{r['rejected']:,}",
-                        _pct(r["rejected"], r["checked"]),
-                    ]
-                    for r in rows
-                ],
-            ),
-            "",
-        ]
-    share = reports.get("hn_share") or {}
-    if share:
-        out += [
-            "Share of `bipia` negatives that use a hard negative:",
-            "",
-            _table(
-                ["split", "email", "table", "code"],
-                [
-                    [sp, *(_pct(v.get(sc, 0), 1) for sc in ("email", "table", "code"))]
-                    for sp, v in share.items()
-                ],
-            ),
-            "",
-            "P4 chooses, among the least-used texts within the length window, the one with the "
-            "fewest over-represented benign words, so the share in train and validation depends "
-            "on that choice (see Known limits).",
-            "",
-        ]
-    for key, title in (
-        ("prompt_a_hn", "Prompt A-hn (email, table)"),
-        ("prompt_b_hn", "Prompt B-hn (code)"),
-        ("judge_v4", "Judge for hard negatives (one text per call)"),
-    ):
-        pr = prompts.get(key)
-        if not pr:
-            continue
-        out += [f"<details><summary>{title}</summary>", ""]
-        for role in ("system", "user"):
-            if role in pr:
-                out += [f"**{role}**", "", "```text", str(pr[role]).rstrip(), "```", ""]
-        out += ["</details>", ""]
-    return out
-
-
-def _hard_negative_limits(reports: dict[str, dict[str, Any]]) -> list[str]:
-    share = reports.get("hn_share") or {}
-    tr, te = share.get("train", {}), share.get("test", {})
-    if not tr or not te:
-        return []
-    return [
-        "- **Hard negatives in train vs test:** in test every pool text is used once, so "
-        + ", ".join(f"{sc} {te.get(sc, 0):.0%}" for sc in ("email", "table", "code"))
-        + " of the negatives are hard negatives; in train "
-        + ", ".join(f"{sc} {tr.get(sc, 0):.0%}" for sc in ("email", "table", "code"))
-        + ", because P4 prefers texts without over-used words.",
-    ]
-
-
-def _p7_section(cfg: Config, reports: dict[str, dict[str, Any]], version: str) -> list[str]:
-    p7 = reports.get("p7")
-    if not p7:
-        return []
-    lim = p7.get("limits", {})
-    base = p7.get("baselines", {})
-    rows = []
-    for name in ("length", "tfidf"):
-        for ev, groups in base.get(name, {}).items():
-            for g in ("email", "table", "code", "all"):
-                m = groups.get(g)
-                if not m or m.get("auc") is None:
-                    continue
-                rows.append([name, ev, g, f"{m['n']:,}", f"{m['auc']:.3f}", f"{m['recall']:.1%}"])
-    out = [
-        "## Checks and shortcut baselines",
-        "",
-        f"Before this version was pushed, the data passed an automatic check ({version}): the "
-        "splits share no document, no train attack text is in test, every positive contains "
-        "its attack, no negative contains attack text, classes are 1:1 per scenario, positions "
-        "are balanced, and removing the inserted text from both members of a pair gives the "
-        "same clean document. Two throwaway classifiers were trained on `bipia` train only, to "
-        "test the data for shortcuts: logistic regression on document length, and TF-IDF "
-        f"(word 1-2-grams) with logistic regression. Limits: AUC {lim.get('length_auc_stop')} "
-        f"(length) and {lim.get('tfidf_auc_stop')} (TF-IDF); a result above a limit blocks the "
-        "push. Recall is at 1% false-positive rate.",
-        "",
-        _table(["baseline", "evaluated on", "scenario", "rows", "AUC", "recall at 1% FPR"], rows),
-        "",
-    ]
-    nl = (p7.get("nemotron_length") or {}).get("all")
-    if nl:
-        out += [
-            f"On `nemotron` the raw document length alone gives AUC {nl['auc']:.3f} (the positive "
-            f"is longer in {nl['positive_longer']:.0%} of pairs): the negative is the positive "
-            "with the injection cut out. It is reported, not a failure.",
-            "",
-        ]
     return out
 
 
@@ -574,28 +401,27 @@ def build_card(
     stats: dict[str, Any],
     version: str,
 ) -> str:
-    """The dataset card (README.md). Every number comes from the reports, config or files."""
+    """The dataset card (README.md): short, with sources, split choices and how it was built.
+    Every number comes from the reports, the config or the files."""
     p1, p3, p4, p5 = reports["p1"], reports["p3"], reports["p4"], reports["p5"]
-    prompts = _prompts(cfg)
     gen, judge = p3.get("generator", {}), p3.get("judge", {})
     missing = [c for c in cfg.dataset.configs if c not in configs]
-    test_total = p4["split"]["test"]
-    test_tables = p4["p4_bipia"]["by_split"]["test"]["scenario"]["table"]
-    pairs, matched = p4.get("pairs", 0), p4.get("length_matched", 0)
-    rows_per_doc = reports.get("rows_per_doc", {})
-    tag = version
+    docs = p1["p1_docs"]
+    by_split = p4["p4_bipia"]["by_split"]
+    share = cfg.p3.hard_negatives.share
 
     out: list[str] = [_front_matter(cfg, configs)]
     out += [
         f"# {cfg.dataset.pretty_name}",
         "",
-        "Pairs of tool outputs for training and benchmarking guards against **indirect prompt "
-        "injection** (IPI). Every attacked sample (label 1) has a benign *twin* (label 0): the "
-        "same document and query, with a harmless text inserted at the same place instead of "
-        "the attack. Only the inserted text differs, so a classifier cannot learn shortcuts "
-        "from the document, the query or the position.",
+        "Tool outputs for training and benchmarking guards against **indirect prompt "
+        "injection**: an instruction hidden in a document that an AI assistant reads. Every "
+        "attacked sample (label 1) has a benign *twin* (label 0): the same document and query, "
+        "with a harmless text inserted at the same place instead of the attack. Only the "
+        "inserted text differs, so a classifier cannot learn shortcuts from the document, the "
+        "query or the position.",
         "",
-        f"**Version `{tag}`.** Configs in this version: "
+        f"**Version `{version}`.** Configs: "
         + ", ".join(f"`{c}`" for c in configs)
         + "."
         + (
@@ -615,125 +441,38 @@ def build_card(
     for c in configs:
         for s in SPLITS[c]:
             out.append(
-                f'ds = load_dataset("{cfg.dataset.repo_id}", "{c}", split="{s}", revision="{tag}")'
+                f'ds = load_dataset("{cfg.dataset.repo_id}", "{c}", split="{s}", '
+                f'revision="{version}")'
             )
     out += ["```", "", "The repository is private: log in with a token that can read it.", ""]
 
-    # Sizes and balance
-    out += ["## Splits and class balance", ""]
-    rows = []
-    for key, st in stats.items():
-        c, s = key.split("/")
-        lab = st["label"]
-        rows.append(
-            [f"`{c}`", s, f"{st['rows']:,}", f"{lab.get('1', 0):,}", f"{lab.get('0', 0):,}"]
-        )
-    out += [_table(["config", "split", "rows", "label 1", "label 0"], rows), ""]
-    if "bipia" in configs:
-        by_split = p4["p4_bipia"]["by_split"]
-        out += [
-            "`bipia` rows per scenario:",
-            "",
-            _table(
-                ["split", "email", "table", "code"],
-                [
-                    [
-                        s,
-                        *(
-                            f"{by_split[s]['scenario'].get(sc, 0):,}"
-                            for sc in ("email", "table", "code")
-                        ),
-                    ]
-                    for s in SPLITS["bipia"]
-                ],
-            ),
-            "",
-            "Insertion positions (start / middle / end) are balanced within every split and "
-            "scenario, for both classes.",
-            "",
-        ]
-
-    # Schema
-    out += [
-        "## Columns",
-        "",
-        f"Every config has the same {len(COLUMNS)} columns, in the same order. A model sees "
-        "`instruct`, "
-        "`query` and `document`, and predicts `answer` (`yes` = contains an injection).",
-        "",
-        _table(
-            ["column", "meaning"],
-            [
-                ["`sample_id`", "unique id"],
-                ["`parent_id`", "on a negative: the `sample_id` of its attacked twin"],
-                [
-                    "`source`, `split`, `source_split`",
-                    "config, split here, split in the source dataset",
-                ],
-                ["`scenario`", "BIPIA: email / table / code; Nemotron: the domain"],
-                ["`instruct`", "the fixed policy text (identical in every row)"],
-                ["`query`", "the user's request, in a fixed template"],
-                ["`document`", "the tool output, with the attack or the benign text inside"],
-                ["`label`, `answer`", "1 / `yes` = contains an injection; 0 / `no` = clean"],
-                ["`label_provenance`", "`construction` or `injection_metadata`"],
-                [
-                    "`generation_method`",
-                    "how the row was made (`sampled_insertion`, `llm_benign_insertion`, "
-                    "`original`, `counterfactual`)",
-                ],
-                ["`attack_group`, `attack_name`", "BIPIA attack type and attack (positives)"],
-                ["`position`, `insert_index`", "BIPIA: where the text was inserted"],
-                ["`injection_span`", "the inserted attack (positives)"],
-                ["`protected_tokens`", "tokens TextFooler must not change (later configs)"],
-                [
-                    "`benign_id`, `benign_span`, `label_checked`",
-                    "BIPIA negatives: the pool text used; its [start, end) characters in "
-                    "`document`; whether a classifier label check ran",
-                ],
-                [
-                    "`document_path`, `injection_vector`, `attack_category`, `goal_group`, "
-                    "`wrapper`, `wrapper_outside_span`, `sentence_repaired`",
-                    "Nemotron metadata",
-                ],
-                ["`victim_model`", "TextFooler victim model (later configs)"],
-            ],
-        ),
-        "",
-        "Columns that do not apply to a row are null.",
-        "",
-    ]
-
     # Sources
     out += [
-        "## Sources and versions",
+        "## Sources",
         "",
         _table(
-            ["source", "version", "licence", "used for"],
+            ["source", "used for", "licence"],
             [
                 [
-                    f"[BIPIA]({cfg.bipia.repo_url}) (Microsoft)",
-                    f"commit `{p1.get('repo_commit', cfg.bipia.repo_commit)}`",
+                    f"[BIPIA]({cfg.bipia.repo_url}) (Microsoft), commit "
+                    f"`{p1.get('repo_commit', cfg.bipia.repo_commit)[:7]}`",
+                    "`bipia`: the documents (emails, tables, code answers), their questions and "
+                    "the 250 attacks",
                     "MIT; table and code contexts CC BY-SA 4.0",
-                    "`bipia`: documents, questions and attacks",
                 ],
                 [
                     f"[Nemotron-RL-Agentic-Indirect-Prompt-Injection-v1]"
-                    f"(https://huggingface.co/datasets/{cfg.nemotron.repo_id}) (NVIDIA)",
-                    f"revision `{p5.get('revision', cfg.nemotron.revision)}`",
+                    f"(https://huggingface.co/datasets/{cfg.nemotron.repo_id}) (NVIDIA), "
+                    f"revision `{p5.get('revision', cfg.nemotron.revision)[:7]}`",
+                    "`nemotron`: records with an injection, and the same records without it",
                     "CC BY 4.0",
-                    "`nemotron`: records and their injections",
                 ],
                 [
-                    f"Mistral Small (`{gen.get('id', cfg.p3.generator.model)}`)",
-                    "API, pinned id",
-                    "Apache 2.0",
-                    "`bipia`: benign texts of the negatives",
-                ],
-                [
-                    f"Mistral Medium (`{judge.get('id', cfg.benign_check.judge_model)}`)",
-                    "API, pinned id",
-                    "n/a (judge only)",
-                    "`bipia`: judging the benign texts (no text of the judge is in the data)",
+                    f"Mistral Small (`{gen.get('id', cfg.p3.generator.model)}`) and Mistral "
+                    f"Medium (`{judge.get('id', cfg.benign_check.judge_model)}`)",
+                    "`bipia`: the synthetic benign texts of the negatives (written by Small, "
+                    "judged by Medium)",
+                    "Apache 2.0 (Small)",
                 ],
                 *(_textfooler_sources(reports) if "bipia_textfooler" in configs else []),
             ],
@@ -741,234 +480,159 @@ def build_card(
         "",
     ]
 
-    # Construction: bipia
+    # Splits
+    out += ["## Splits", ""]
     if "bipia" in configs:
-        docs = p1["p1_docs"]
-        f_rows = filter_rates(p3)
+        total_docs = docs["total"]
+        per_doc = {
+            "train": f"{cfg.bipia.n_per_doc}, sampled",
+            "validation": f"{cfg.bipia.n_per_doc}, sampled",
+            "test": "every test attack (75 text, 50 code)",
+        }
+        rows = []
+        for s in SPLITS["bipia"]:
+            sc = by_split[s]["scenario"]
+            rows.append(
+                [
+                    s,
+                    f"{docs['split'][s]:,}",
+                    per_doc[s],
+                    f"{p4['split'][s]:,}",
+                    *(f"{sc.get(k, 0):,}" for k in ("email", "table", "code")),
+                ]
+            )
+        out += [
+            "### `bipia`",
+            "",
+            f"- **Split by document.** The {total_docs:,} BIPIA documents are divided between "
+            "train, validation and test, so no document is in more than one split. Test is "
+            "BIPIA's official test documents plus "
+            f"{docs.get('tables_moved_to_test', cfg.bipia.tables_moved_to_test)} tables moved "
+            "from train (to have enough tables); about 10% of each scenario is held out for "
+            "validation.",
+            "- **Attacks follow the split.** Train and validation use only BIPIA's train "
+            "attacks; test uses only its test attacks.",
+            f"- **Sampling.** Train and validation: {cfg.bipia.n_per_doc} (attack, position) "
+            "pairs sampled for each document. Test: every document meets every test attack of "
+            "its scenario, at a balanced random position (start, middle or end).",
+            "",
+            _table(
+                ["split", "documents", "attacks per document", "rows", "email", "table", "code"],
+                rows,
+            ),
+            "",
+            f"Every attacked row has its twin, so rows are half label 1 and half label 0. Test "
+            f"has more rows than train although train has more documents, because test pairs "
+            f"every document with every test attack (a benchmark) while train samples "
+            f"{cfg.bipia.n_per_doc} per document.",
+            "",
+        ]
+    if "nemotron" in configs:
+        out += [
+            "### `nemotron`",
+            "",
+            f"Test only: {p5['total']:,} rows ({p5['total'] // 2:,} pairs), capped at "
+            f"{cfg.nemotron.goal_cap} pairs per attacker goal so that no goal dominates.",
+            "",
+        ]
+    if "bipia_textfooler" in configs:
+        out += [
+            "### `bipia_textfooler`",
+            "",
+            "Test only: variants of `bipia` test samples (see below). Each stays in the split "
+            "of its source document.",
+            "",
+        ]
+
+    # How it was built
+    if "bipia" in configs:
         out += [
             "## How `bipia` was built",
             "",
-            f"1. **Documents (P1).** BIPIA's email, table and code documents are deduplicated "
-            f"({docs['total']:,} documents: "
-            + ", ".join(f"{k} {v:,}" for k, v in docs["scenario"].items())
-            + "). The split is per document, so no document is in two splits: "
-            + ", ".join(f"{k} {v:,}" for k, v in docs["split"].items())
-            + f". BIPIA's official test documents go to test, plus "
-            f"{docs.get('tables_moved_to_test', cfg.bipia.tables_moved_to_test)} tables moved "
-            f"from train; about 10% of each scenario is held out for validation. "
-            f"{docs.get('cross_split_emails_dropped', 0)} emails found in both official splits "
-            "are dropped from train.",
-            f"2. **Attacked samples (P2, label 1).** Test documents get only BIPIA's test "
-            f"attacks, train and validation only the train attacks "
-            f"({p1['p1_attacks']['total']} attacks). Test: every document x every test attack "
-            f"(75 text attacks, 50 code attacks), at a balanced random position. "
-            f"Train/validation: {cfg.bipia.n_per_doc} sampled (attack, position) pairs per "
-            "document. The attack is inserted at the start, the middle (a sentence or line "
-            "boundary) or the end, joined with a newline. The query is the document's "
-            "question (email, table) or `Fix the bug in my code. Error: <last line of the "
-            "error>` (code).",
-            f"3. **Benign pool (P3).** For every document and position, Mistral Small writes "
-            f"{cfg.p3.n} short texts that fit the document (25 for test email/table pools). "
-            "Each text passes four filters: shape, forbidden content (instructions, "
-            "attack-like wording, network or file code), near-duplicates, and an LLM judge "
-            f"(Mistral Medium). {p3['total']:,} texts were kept out of "
-            f"{p3.get('generated', 0):,} generated. {cfg.p3.hard_negatives.share:.0%} of "
-            "every pool is then replaced by hard negatives (see *Hard negatives*).",
-            f"4. **Negatives (P4, label 0).** Each positive gets one pool text of its own "
-            "document and position, inserted with the same function: least used text first, "
-            f"then within {cfg.p4.length_window['text']:.0%} of the attack's length "
-            f"({cfg.p4.length_window['code']:.0%} for code), then the fewest over-represented "
-            "benign words, then the closest length. No negative row appears twice. The "
-            "negative's `benign_span` is where its text sits in `document`.",
-            "",
-            "### P3 generation settings",
-            "",
-            _table(
-                ["setting", "value"],
-                [
-                    [
-                        "generator",
-                        _model(gen, cfg.p3.generator.model),
-                    ],
-                    [
-                        "judge",
-                        _model(judge, cfg.benign_check.judge_model),
-                    ],
-                    [
-                        "temperature",
-                        "one seeded value per call in [{}, {}]".format(
-                            *cfg.p3.generator.temperature
-                        ),
-                    ],
-                    ["reasoning effort", f"`{cfg.p3.generator.reasoning_effort}`"],
-                    [
-                        "max tokens",
-                        ", ".join(f"{k} {v}" for k, v in cfg.p3.generator.max_tokens.items()),
-                    ],
-                    [
-                        "length targets (characters)",
-                        ", ".join(f"{k} {v}" for k, v in cfg.p3.lengths.items()),
-                    ],
-                    [
-                        "size mix per pool (short/medium/long)",
-                        "/".join(str(cfg.p3.mix[k]) for k in ("short", "medium", "long")),
-                    ],
-                    [
-                        "judge batch size",
-                        ", ".join(f"{k} {v}" for k, v in cfg.p3.judge_batch_size.items()) or "1",
-                    ],
-                    [
-                        "prompt versions",
-                        "`{}`, judge `{}`, batch judge `{}`".format(
-                            prompts.get("prompt_version"),
-                            prompts.get("judge_prompt_version"),
-                            prompts.get("judge_batch_prompt_version"),
-                        ),
-                    ],
-                    ["seed", str(cfg.seed)],
-                ],
-            ),
+            "1. **Attacked samples.** An attack is inserted into a document at the start, the "
+            "middle (a sentence or line boundary) or the end. The query is the document's "
+            "question (email, table) or a request to fix the error (code).",
+            "2. **Synthetic benign twins.** For every document and position, Mistral Small "
+            "writes harmless texts that fit the document, and Mistral Medium judges each one "
+            "(it must not be an injection). A twin is the same document with one of these "
+            "texts inserted in place of the attack, at the same position and with the same "
+            "query. About "
+            f"{share:.0%} of the texts are *hard negatives*: harmless texts that sound like "
+            "instructions to the human reader, so a model cannot separate the classes just "
+            'because attacks use words such as "your reply" or "the following code".',
+            "3. **Checks.** Before each push, the data is checked automatically (no document "
+            "in two splits, every attack present, no attack text in a twin, classes 1:1, "
+            "positions balanced) and two simple shortcut classifiers (document length, word "
+            "counts) must stay below fixed limits.",
             "",
         ]
-        if f_rows:
-            out += [
-                "### P3 rejection rate per filter (original texts)",
-                "",
-                _table(
-                    ["filter", "texts checked", "rejected", "rejection rate"],
-                    [
-                        [
-                            r["name"],
-                            f"{r['checked']:,}",
-                            f"{r['rejected']:,}",
-                            _pct(r["rejected"], r["checked"]),
-                        ]
-                        for r in f_rows
-                    ],
-                ),
-                "",
-                "A text is counted at the first filter it fails.",
-                "",
-            ]
-        jc = p3.get("judge_control") or {}
-        if jc:
-            out += [
-                f"**Judge positive control:** {jc.get('flagged')} of {jc.get('n')} real BIPIA "
-                "attacks, judged with every run, were flagged.",
-                "",
-            ]
-        out += [
-            "### P3 prompts (original texts)",
-            "",
-            "Placeholders in braces are filled per document and position.",
-            "",
-        ]
-        for key, title in (
-            ("prompt_a", "Prompt A (email, table)"),
-            ("prompt_b", "Prompt B (code)"),
-            ("judge", "Judge (one text per call)"),
-            ("judge_batch", "Judge (batch)"),
-        ):
-            p = prompts.get(key)
-            if not p:
-                continue
-            out += [f"<details><summary>{title}</summary>", ""]
-            for role in ("system", "user"):
-                if role in p:
-                    out += [f"**{role}**", "", "```text", str(p[role]).rstrip(), "```", ""]
-            out += ["</details>", ""]
-
-    if "bipia" in configs:
-        out += _hard_negative_section(cfg, reports, prompts)
-
-    # Construction: nemotron
     if "nemotron" in configs:
-        s5 = p5.get("stats", {})
         out += [
             "## How `nemotron` was built",
             "",
-            f"1. **Records (P5).** {s5.get('records', 0):,} records of NVIDIA's release, file "
-            f"`{cfg.nemotron.filename}`, at the pinned revision.",
-            "2. **Document:** the first two levels of the path where the injection sits, "
-            "serialised as JSON. The injection is left exactly as released.",
-            "3. **Positive (label 1):** the record as released. **Negative (label 0):** the same "
-            "document with the injection cut out; where the cut falls inside a sentence the "
-            f"sentence is repaired by hand-checked rules ({s5.get('sentence_repaired', 0)} "
-            "records).",
-            f"4. **Goal cap:** at most {cfg.nemotron.goal_cap} pairs per attacker goal "
-            f"({s5.get('before_cap', {}).get('total', 0):,} rows before the cap, "
-            f"{p5['total']:,} after).",
-            "5. **Review:** every cut point and the "
-            f"{s5.get('hard_negatives', {}).get('after_cap', 0)} "
-            "hard negatives (negatives that contain words such as 'urgent' or 'assistant') were "
-            "inspected; 20 random pairs were read in full.",
-            "",
-            "**Changes to NVIDIA's data (CC BY 4.0):** records were reformatted to this schema, "
-            "the document was cut to the injection's path, a clean counterfactual was added per "
-            "record, and records were capped per attacker goal.",
+            "Each NVIDIA record becomes a pair: the document with its injection as released "
+            "(label 1), and the same document with the injection cut out (label 0). Where a "
+            "cut falls inside a sentence it is repaired by hand-checked rules. No LLM is used.",
             "",
         ]
-
     if "bipia_textfooler" in configs:
         out += _textfooler_section(cfg, reports)
-    out += _p7_section(cfg, reports, version)
 
-    # Limits
-    out += ["## Known limits", ""]
-    if "bipia" in configs:
-        out += [
-            f"- **Tables dominate `bipia` test:** {test_tables:,} of {test_total:,} test rows "
-            f"({_pct(test_tables, test_total)}). Report metrics per `scenario`.",
-            "- **Documents repeat:** a document appears in "
-            + (
-                ", ".join(
-                    f"{v['min']}-{v['max']} rows in {s}"
-                    if v["min"] != v["max"]
-                    else f"{v['max']} rows in {s}"
-                    for s, v in rows_per_doc.items()
-                )
-                if rows_per_doc
-                else "many rows"
-            )
-            + " (once per attack, plus its twin). Train has more documents than test but fewer "
-            "rows, because test pairs every document with every test attack.",
-            "- **Attack types:** the name 'Language Translation' is used in both BIPIA's train "
-            "and test attacks, with different strings (train: translate a phrase; test: answer "
-            "in another language). Report test metrics per `attack_group`, with and without it.",
-            f"- **Length matching:** {_pct(matched, pairs)} of pairs are within the length "
-            "window; the rest (mostly long test attacks) use the closest-length pool text.",
-            *_hard_negative_limits(reports),
-            "- **No extra classifier label check** was run on the benign texts "
-            "(`label_checked = false`); they were checked by the filters and the judge.",
-        ]
-    if "nemotron" in configs:
-        out += [
-            "- **Nemotron positives are only attacks that succeeded against one defender** "
-            "in NVIDIA's release, so they are not a sample of all possible attacks. `nemotron` "
-            "is a test set only. In every pair the positive is longer than the negative (the "
-            "injection is cut out of it), so document length separates the two classes there: "
-            "do not read length-sensitive results on `nemotron` as detection skill.",
-        ]
-    if "bipia_textfooler" in configs:
-        out += [
-            "- **`bipia_textfooler` keeps only variants that fooled ProtectAI.** It measures "
-            "robustness to one attack against one victim, not the rate at which a guard is "
-            "fooled in general.",
-        ]
-    out.append("")
+    # Columns
+    out += [
+        "## Columns",
+        "",
+        f"Every config has the same {len(COLUMNS)} columns, in the same order. A model sees "
+        "`instruct`, `query` and `document`, and predicts `answer` (`yes` = contains an "
+        "injection) or `label` (1 / 0).",
+        "",
+        _table(
+            ["column", "meaning"],
+            [
+                [
+                    "`sample_id`, `parent_id`",
+                    "unique id; on a negative, the id of its attacked twin",
+                ],
+                ["`source`, `split`, `source_split`", "config, split here, split in the source"],
+                ["`scenario`", "BIPIA: email / table / code; Nemotron: the domain"],
+                ["`instruct`, `query`", "the fixed policy text; the user's request"],
+                ["`document`", "the tool output, with the attack or the benign text inside"],
+                ["`label`, `answer`", "1 / `yes` = contains an injection; 0 / `no` = clean"],
+                ["`attack_group`, `attack_name`, `injection_span`", "the attack (positives)"],
+                ["`position`, `insert_index`", "BIPIA: where the text was inserted"],
+                [
+                    "`benign_id`, `benign_span`",
+                    "BIPIA negatives: the benign text and its [start, end) in `document`",
+                ],
+                ["`protected_tokens`, `victim_model`", "TextFooler variants only"],
+                [
+                    "Nemotron metadata",
+                    "`document_path`, `injection_vector`, `attack_category`, "
+                    "`goal_group`, `wrapper`, `wrapper_outside_span`, `sentence_repaired`",
+                ],
+                [
+                    "`label_provenance`, `generation_method`, `label_checked`",
+                    "how the row and its label were made",
+                ],
+            ],
+        ),
+        "",
+        "Columns that do not apply to a row are null.",
+        "",
+    ]
 
     # Licences
     out += [
         "## Licences and credit",
         "",
-        f"This dataset is released under "
-        f"**{LICENCE_NAMES.get(cfg.dataset.license, cfg.dataset.license)}** "
+        f"Released under **{LICENCE_NAMES.get(cfg.dataset.license, cfg.dataset.license)}** "
         "(share-alike, because it contains CC BY-SA 4.0 material). The repository is private.",
         "",
-        "- **BIPIA** (Microsoft): MIT. Its table and code contexts are CC BY-SA 4.0 (share-alike).",
+        "- **BIPIA** (Microsoft): MIT. Its table and code contexts are CC BY-SA 4.0.",
         "- **Nemotron-RL-Agentic-Indirect-Prompt-Injection-v1** (NVIDIA): CC BY 4.0, "
-        "<https://creativecommons.org/licenses/by/4.0/>. Credit: NVIDIA. Changes: see *How "
-        "`nemotron` was built*.",
+        "<https://creativecommons.org/licenses/by/4.0/>. Credit: NVIDIA. Changes: records "
+        "reformatted to this schema, the document cut to the injection's path, a clean "
+        "counterfactual added per record, records capped per attacker goal.",
         "- **Benign texts** in `bipia` negatives were generated with Mistral Small (Apache 2.0).",
         *_textfooler_licences(reports, "bipia_textfooler" in configs),
         "",
@@ -993,18 +657,21 @@ def rows_per_doc(cfg: Config) -> dict[str, dict[str, int]]:
     return out
 
 
-def stage(cfg: Config, version: str, card: str, out_dir: Path) -> list[Path]:
+def stage(
+    cfg: Config, version: str, card: str, out_dir: Path, card_only: bool = False
+) -> list[Path]:
     """Copy the parquet files this version adds, and write README.md, into a fresh staging
     folder. v1 stages only `bipia_textfooler` (+ the card): v0 files are never uploaded again."""
     if out_dir.exists():
         shutil.rmtree(out_dir)
     files: list[Path] = []
-    for config in new_configs(version):
+    for config in [] if card_only else new_configs(version):
         for split in SPLITS[config]:
             dst = out_dir / config / f"{split}.parquet"
             dst.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(parquet_path(cfg, config, split), dst)
             files.append(dst)
+    out_dir.mkdir(parents=True, exist_ok=True)
     readme = out_dir / "README.md"
     readme.write_text(card, encoding="utf-8", newline="\n")
     files.append(readme)
@@ -1038,6 +705,35 @@ def scan_secrets(files: list[Path], secrets: list[bytes] | None = None) -> dict[
 
 
 # ---------------------------------------------------------------- push and verify
+
+
+def push_card(cfg: Config, out_dir: Path, version: str, api: Any = None) -> dict[str, Any]:
+    """Upload ONLY README.md as a new commit on the main branch. No data file is sent and no tag
+    is created or moved: the tag of `version` keeps pointing at the commit it was pushed at, so
+    `revision=version` still loads exactly the same data."""
+    if api is None:
+        from huggingface_hub import HfApi
+
+        api = HfApi(token=require_secret("HF_TOKEN"))
+    repo = cfg.dataset.repo_id
+    if not getattr(api.repo_info(repo, repo_type="dataset"), "private", False):
+        raise RuntimeError(f"{repo} is not private: refusing to push.")
+    tags = {t.name for t in getattr(api.list_repo_refs(repo, repo_type="dataset"), "tags", [])}
+    if version not in tags:
+        raise RuntimeError(f"tag {version!r} does not exist on {repo}: push the version first.")
+    commit = api.upload_file(
+        repo_id=repo,
+        repo_type="dataset",
+        path_or_fileobj=str(out_dir / "README.md"),
+        path_in_repo="README.md",
+        commit_message=f"Update the dataset card ({version} data unchanged)",
+    )
+    return {
+        "commit": getattr(commit, "oid", None),
+        "commit_url": getattr(commit, "commit_url", None),
+        "files": ["README.md"],
+        "tag_moved": False,
+    }
 
 
 def push(cfg: Config, out_dir: Path, version: str, api: Any = None) -> dict[str, Any]:
@@ -1293,6 +989,18 @@ def _report(cfg: Config, version: str, payload: dict[str, Any]) -> Path:
             f"- URL: {p.get('commit_url')}",
             "",
         ]
+    if data.get("card_push"):
+        c = data["card_push"]
+        lines += [
+            "## Card update",
+            "",
+            "Only `README.md` was uploaded, as a new commit on `main`. No data file was sent and "
+            f"the tag `{version}` was not moved.",
+            "",
+            f"- Commit: `{c.get('commit')}`",
+            f"- URL: {c.get('commit_url')}",
+            "",
+        ]
     if data.get("verify"):
         v = data["verify"]
         lines += [
@@ -1347,6 +1055,7 @@ def run(
     *,
     version: str = "v0",
     do_push: bool = False,
+    card_only: bool = False,
     api: Any = None,
 ) -> dict[str, Any]:
     cfg = cfg or load_config()
@@ -1357,15 +1066,15 @@ def run(
     reports["hn_share"] = hn_share(cfg)
     card = build_card(cfg, configs, reports, stats, version)
     out_dir = stage_dir(cfg)
-    files = stage(cfg, version, card, out_dir)
+    files = stage(cfg, version, card, out_dir, card_only=card_only)
     hits = scan_secrets(files)
     report_path(cfg, card_copy_name(version)).write_text(card, encoding="utf-8", newline="\n")
     gate = p7_gate(cfg, version, configs)
     payload: dict[str, Any] = {
-        "action": "push" if do_push else "dry-run",
+        "action": ("card update" if card_only else "push") if do_push else "dry-run",
         "version": version,
         "configs": configs,
-        "uploads": new_configs(version),
+        "uploads": [] if card_only else new_configs(version),
         "files": stats,
         "gate": gate,
         "card_sha256": hashlib.sha256(card.encode()).hexdigest(),
@@ -1379,8 +1088,11 @@ def run(
         if not gate["ok"]:
             _report(cfg, version, payload)
             raise PushBlockedError(f"push blocked: {gate['reason']}")
-        payload["push"] = push(cfg, out_dir, version, api=api)
-        payload["verify"] = None
+        if card_only:
+            payload["card_push"] = push_card(cfg, out_dir, version, api=api)
+        else:
+            payload["push"] = push(cfg, out_dir, version, api=api)
+            payload["verify"] = None
     report = _report(cfg, version, payload)
     return {**payload, "report": report, "card": out_dir / "README.md"}
 
