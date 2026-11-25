@@ -24,12 +24,17 @@ from dataset_builder.insert import SEP, InsertionError, remove
 from dataset_builder.io import arrow_schema, read_jsonl
 from dataset_builder.query import query as build_doc_query
 from dataset_builder.reports import report_path
-from dataset_builder.schema import COLUMNS, Sample
+from dataset_builder.schema import Sample, TextFoolerSample, columns_for
 
 SCOPE: dict[str, dict[str, tuple[str, ...]]] = {
     "v0": {"bipia": ("train", "validation", "test"), "nemotron": ("test",)},
+    "v1": {
+        "bipia": ("train", "validation", "test"),
+        "nemotron": ("test",),
+        "bipia_textfooler": ("test",),
+    },
 }
-LATER = {"v1": "needs P6 (bipia_textfooler test)", "v2": "needs P8 (bipia_textfooler train/val)"}
+LATER = {"v2": "needs P8 (bipia_textfooler train/val)"}
 POSITIONS = ("start", "middle", "end")
 SCEN_ORDER = ("email", "table", "code")
 PRIORITY_MARKERS = ("[PRIORITY MESSAGE]", "[/PRIORITY MESSAGE]")
@@ -139,17 +144,18 @@ def check_load(
     os.environ["HF_DATASETS_OFFLINE"] = "1"  # local files only: no network call
     from datasets import load_dataset
 
-    expected = arrow_schema(Sample)
     out, counts = [], {}
     with tempfile.TemporaryDirectory(prefix="p7") as cache:  # short path (Windows limit)
         for config, splits in scope.items():
             files = {s: str(cfg.paths.out / config / f"{s}.parquet") for s in splits}
             ds = load_dataset("parquet", data_files=files, cache_dir=cache)
             types_bad, count_bad = [], []
+            names = columns_for(config)
+            expected = arrow_schema(TextFoolerSample if config == "bipia_textfooler" else Sample)
             for s in splits:
                 schema = ds[s].features.arrow_schema
                 counts[f"{config}/{s}"] = ds[s].num_rows
-                if tuple(schema.names) != COLUMNS:
+                if tuple(schema.names) != names:
                     types_bad.append(f"{s}: column names or order differ from the contract")
                 else:
                     types_bad += [
@@ -166,7 +172,7 @@ def check_load(
                     "load: columns and types match the contract",
                     config,
                     types_bad,
-                    f"{len(COLUMNS)} columns",
+                    f"{len(names)} columns",
                 )
             )
             out.append(
@@ -1167,6 +1173,74 @@ def render(cfg: Config, version: str, res: dict[str, Any]) -> str:
     return "\n".join(L) + "\n"
 
 
+def check_textfooler(cfg: Config, bipia_test: Rows, rows: Rows) -> list[dict]:
+    """The `bipia_textfooler` test config (v1): every row traces to a test sample, only the
+    inserted text changed, and only by word swaps within the caps."""
+    from dataset_builder.steps.p6_span import check_variant, locate_span
+
+    thr, cap = cfg.textfooler.threshold, cfg.textfooler.max_span_fraction
+    parents = {r["sample_id"]: r for r in bipia_test}
+    ids = [r["sample_id"] for r in rows]
+    c = "bipia_textfooler"
+    untraced = [r["sample_id"] for r in rows if r["parent_id"] not in parents]
+    not_test = [r["sample_id"] for r in rows if r["split"] != "test" or r["source"] != c]
+    dup = [i for i, n in Counter(ids).items() if n > 1] + [i for i in ids if i in parents]
+    outside, rules, scores, labels = [], [], [], []
+    for r in rows:
+        par = parents.get(r["parent_id"])
+        if par is None:
+            continue
+        method = r["generation_method"]
+        same_doc = r["document"] == par["document"]
+        if r["label"] != par["label"] or (method == "control") != same_doc:
+            labels.append(r["sample_id"])
+        malicious_ok = method != "textfooler" or r["label"] == 0 or (r["p_yes_base"] or 1) < thr
+        if r["p_yes_base"] is None or not malicious_ok:
+            scores.append(r["sample_id"])
+        if method == "control":
+            continue
+        try:
+            old = locate_span(par, None)
+            if r["label"] == 1:
+                new_ins = r["injection_span"]
+            else:
+                new_ins = r["document"][r["benign_span"][0] : r["benign_span"][1]]
+            idx, old_ins = par["insert_index"], old.inserted()
+            tail_ok = r["document"][idx + len(new_ins) :] == par["document"][idx + len(old_ins) :]
+            if (
+                r["document"][:idx] != par["document"][:idx]
+                or not tail_ok
+                or not new_ins.endswith(old.code)
+            ):
+                outside.append(r["sample_id"])
+                continue
+            toks = list(r["protected_tokens"] or [])
+            toks += [t for t in (par.get("protected_tokens") or []) if t not in toks]
+            reason, _, _ = check_variant(old, new_ins[: len(new_ins) - len(old.code)], toks, cap)
+            if reason:
+                rules.append(f"{r['sample_id']}: {reason}")
+        except (KeyError, TypeError, ValueError) as e:  # a span that cannot be found
+            outside.append(f"{r['sample_id']}: {e}")
+    by_method = Counter((r["generation_method"], r["label"]) for r in rows)
+    n_ctl, n_pert = by_method[("control", 0)], by_method[("textfooler", 0)]
+    return [
+        result("1", "textfooler: every parent_id is a bipia test sample", c, untraced),
+        result("1", "textfooler: split is test, source is bipia_textfooler", c, not_test),
+        result("1", "textfooler: sample_ids unique and not in bipia", c, dup),
+        result("1", "textfooler: label kept; controls unchanged, variants changed", c, labels),
+        result("1", "textfooler: only the inserted text changed", c, outside),
+        result("1", "textfooler: word swaps only, within the cap, protected tokens kept", c, rules),
+        result("1", "textfooler: p_yes_base set; malicious variants below threshold", c, scores),
+        result(
+            "1",
+            "textfooler: as many plain twins as perturbed twins",
+            c,
+            [] if n_ctl == n_pert else [f"{n_ctl} control vs {n_pert} perturbed"],
+            f"{len(rows):,} rows: {dict(by_method)}",
+        ),
+    ]
+
+
 # ================================================================ entry point
 
 
@@ -1174,13 +1248,17 @@ def load(cfg: Config, config: str, splits: Iterable[str]) -> dict[str, Rows]:
     return {s: pq.read_table(cfg.paths.out / config / f"{s}.parquet").to_pylist() for s in splits}
 
 
-def report_counts(cfg: Config) -> dict[str, dict[str, int]]:
+def report_counts(cfg: Config, version: str = "v0") -> dict[str, dict[str, int]]:
     p4 = json.loads(report_path(cfg, "p4_composition.json").read_text(encoding="utf-8"))
     p5 = json.loads(report_path(cfg, "p5_nemotron.json").read_text(encoding="utf-8"))
-    return {
+    out = {
         "bipia": {k: int(v) for k, v in p4["split"].items()},
         "nemotron": {k: int(v) for k, v in p5["split"].items()},
     }
+    if "bipia_textfooler" in SCOPE[version]:
+        p6 = json.loads(report_path(cfg, "p6_textfooler.json").read_text(encoding="utf-8"))
+        out["bipia_textfooler"] = {k: int(v) for k, v in p6["split"].items()}
+    return out
 
 
 def nemotron_goals(cfg: Config) -> dict[int, str]:
@@ -1194,7 +1272,7 @@ def run(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
     cfg = cfg or load_config()
     if version not in SCOPE:
         raise P7NotReadyError(
-            f"P7 {version}: {LATER.get(version, 'unknown version')}; only v0 can run now."
+            f"P7 {version}: {LATER.get(version, 'unknown version')}; only v0 and v1 can run now."
         )
     scope = SCOPE[version]
     bipia = load(cfg, "bipia", scope["bipia"])
@@ -1202,7 +1280,7 @@ def run(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
     nemotron = [r for rs in nem.values() for r in rs]
     attacks = list(read_jsonl(cfg.paths.interim / "attacks.jsonl"))
     docs = list(read_jsonl(cfg.paths.interim / "bipia_docs.jsonl"))
-    ref = report_counts(cfg)
+    ref = report_counts(cfg, version)
 
     checks, load_counts = check_load(cfg, scope, ref)
     checks += check_splits(bipia) + check_attacks_in_test(
@@ -1213,9 +1291,15 @@ def run(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
     bal, shares = check_balance(cfg, "bipia", bipia)
     checks += bal + check_balance(cfg, "nemotron", nem)[0]
     checks += check_pairs(bipia, docs) + check_queries(cfg, bipia, docs)
-    checks.append(
-        result("1", "TextFooler checks", "bipia_textfooler", None, f"not in {version} (from v1)")
-    )
+    if "bipia_textfooler" in scope:
+        tf_rows = load(cfg, "bipia_textfooler", scope["bipia_textfooler"])["test"]
+        checks += check_textfooler(cfg, bipia["test"], tf_rows)
+    else:
+        checks.append(
+            result(
+                "1", "TextFooler checks", "bipia_textfooler", None, f"not in {version} (from v1)"
+            )
+        )
 
     gaps = length_gaps("bipia", bipia) + length_gaps("nemotron", nem)
     base = baselines(cfg, bipia["train"], bipia["test"], nemotron)

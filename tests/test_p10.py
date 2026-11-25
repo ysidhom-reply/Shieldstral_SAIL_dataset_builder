@@ -9,7 +9,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from dataset_builder.reports import CountMismatchError
-from dataset_builder.schema import COLUMNS
+from dataset_builder.schema import columns_for
 from dataset_builder.steps import p10_push as p10
 
 SIZES = {("bipia", "train"): 8, ("bipia", "validation"): 4, ("bipia", "test"): 6}
@@ -18,7 +18,7 @@ SIZES[("bipia_textfooler", "test")] = 4
 
 
 def _table(config: str, split: str, n: int, extra: bool = False) -> pa.Table:
-    cols: dict[str, list] = {c: [None] * n for c in COLUMNS}
+    cols: dict[str, list] = {c: [None] * n for c in columns_for(config)}
     cols["sample_id"] = [f"{config}-{split}-{i}" for i in range(n)]
     cols["source"] = [config] * n
     cols["split"] = [split] * n
@@ -328,7 +328,7 @@ def test_v1_stages_only_the_new_config_and_a_card_with_the_textfooler_section(re
     assert "apache-2.0" in card  # the victim's licence, from its model card
     assert "TextAttack" in card and "MIT" in card
     assert "Only variants that fooled the victim are kept" in card
-    assert "0.84" in card and "stride 256" in card  # constraint values and the window rule
+    assert "0.84" in card and "no windows" in card  # constraint values and the prompt rule
     assert "| email | attacked (1) | 30 | 4 | 12 | 14 | 2 |" in card  # attempts per class
     assert "Version `v1`" in card
 

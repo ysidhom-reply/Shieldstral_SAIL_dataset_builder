@@ -5,6 +5,7 @@ load inputs -> (pilot slice) -> build -> validate Samples -> prepare_out -> writ
 -> write_counts_report -> check_expected.
 """
 
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
@@ -182,34 +183,58 @@ def p4_bipia_assemble(ctx: typer.Context) -> None:
 
 @app.command("p6-textfooler")
 def p6_textfooler(ctx: typer.Context) -> None:
-    """P6: TextFooler test variants against ProtectAI (CPU). Pilot by default (20 samples)."""
+    """P6: TextFooler test variants against base Shieldstral (needs a GPU). Pilot by default."""
     from dataset_builder.steps import p6_textfooler as p6
 
     opts: RunOptions = ctx.obj
     out = p6.run(opts.cfg, force=opts.force, is_pilot=opts.pilot)
-    st = out["stats"]["all"]
-    typer.echo(
-        f"processed: {st['processed']}  kept: {st['kept']}  "
-        f"attack success: {st['succeeded']}/{st['succeeded'] + st['failed']}"
-    )
     typer.echo(f"results: {out['results']}")
     typer.echo(f"report:  {out['report']}")
-    typer.echo(f"cost:    ${out['cost_usd']:.4f}")
     if opts.pilot:
-        pj = out["projection"]["total_hours"]
+        pj = out["projection"]
         typer.echo(
             "projected full run: "
-            + (f"{pj:.1f} h" if pj is not None else "unknown (a class had no kept variant)")
+            + (f"{pj['total_hours']:.1f} h" if pj["total_hours"] is not None else "unknown")
+            + (" - UNREASONABLE, do not run --full" if pj["unreasonable"] else "")
         )
-        typer.echo("Pilot done. Read the report before running --full.")
+        typer.echo("Pilot done. Read the report, set attempt_cap, then run --full.")
     else:
         typer.echo(f"output:  {out['out']}")
+        typer.echo(f"human check: {out['human_check']}")
+
+
+@app.command("p6-calibrate-judge")
+def p6_calibrate_judge(
+    set_b: Annotated[
+        Path | None, typer.Option("--set-b", help="Hand-labelled CSV for set B (see the report).")
+    ] = None,
+) -> None:
+    """P6: calibrate the local judge on set A (labels of originals) and set B (hand-labelled)."""
+    from dataset_builder.steps import p6_calibrate
+
+    out = p6_calibrate.run(set_b=set_b)
+    typer.echo(f"report: {out['report']}")
+
+
+@app.command("p6-agreement")
+def p6_agreement(
+    path: Annotated[
+        Path | None, typer.Argument(help="human_check.csv (default: reports/p6)")
+    ] = None,
+) -> None:
+    """P6: agreement between the person's verdicts and the judge's in human_check.csv."""
+    from dataset_builder.config import load_config
+    from dataset_builder.steps.p6_report import human_agreement
+
+    path = path or load_config().paths.reports / "p6" / "human_check.csv"
+    res = human_agreement(path)
+    typer.echo(json.dumps(res, indent=2))
 
 
 @app.command("p7-checks")
 def p7_checks(
     ctx: typer.Context,
-    version: Annotated[str, typer.Option(help="v0, v1 or v2 (only v0 can run now).")] = "v0",
+    version: Annotated[str, typer.Option(help="v0, v1 or v2 (v0 and v1 run now).")] = "v0",
 ) -> None:
     """P7: data checks, shortcut baselines and diagnostics for one version (reads data/out only).
     Exit 0 = PUSH ALLOWED, 1 = a data check failed, 2 = only a baseline limit is exceeded."""

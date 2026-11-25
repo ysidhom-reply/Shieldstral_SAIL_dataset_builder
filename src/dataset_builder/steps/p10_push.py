@@ -26,7 +26,7 @@ import yaml
 
 from dataset_builder.config import REPO_ROOT, Config, load_config, require_secret
 from dataset_builder.reports import CountMismatchError, report_path
-from dataset_builder.schema import COLUMNS
+from dataset_builder.schema import COLUMNS, columns_for
 
 REPORT_NAME = "p10_push"
 # Splits pushed per config. v1 has only the TextFooler test split (v2 will add train/validation).
@@ -182,9 +182,9 @@ def preflight(
                 "label": {str(k): v for k, v in sorted(labels.items())},
                 "bytes": path.stat().st_size,
             }
-            if cols != COLUMNS:
-                extra = sorted(set(cols) - set(COLUMNS))
-                missing = sorted(set(COLUMNS) - set(cols))
+            if cols != columns_for(config):
+                extra = sorted(set(cols) - set(columns_for(config)))
+                missing = sorted(set(columns_for(config)) - set(cols))
                 errors.append(
                     f"{config}/{split}: columns differ from the schema "
                     f"(extra {extra}, missing {missing}, or a different order)"
@@ -277,7 +277,7 @@ def _textfooler_sources(reports: dict[str, dict[str, Any]]) -> list[list[str]]:
     name, _, rev = info.get("victim", "").partition("@")
     return [
         [
-            f"[{name}](https://huggingface.co/{name}) (ProtectAI)",
+            f"[{name}](https://huggingface.co/{name}) (Mistral AI)",
             f"revision `{rev}`" if rev else "pinned revision",
             info.get("victim_license") or "see its model card",
             "`bipia_textfooler`: the victim the variants were built against (no text of it is "
@@ -299,7 +299,7 @@ def _textfooler_licences(reports: dict[str, dict[str, Any]], included: bool) -> 
     victim = info.get("victim", "").partition("@")[0]
     return [
         "- **TextAttack** (MIT): the TextFooler recipe that built `bipia_textfooler`.",
-        f"- **{victim or 'ProtectAI victim model'}**: "
+        f"- **{victim or 'Shieldstral (victim model)'}**: "
         f"{info.get('victim_license') or 'licence as stated on its model card'}. It was only "
         "queried; none of its weights or outputs are in the data.",
     ]
@@ -337,11 +337,11 @@ def _textfooler_section(cfg: Config, reports: dict[str, dict[str, Any]]) -> list
         "the victim changes its prediction. An attacked sample is made to look clean, a clean "
         "sample is made to look like an injection.",
         "",
-        f"- **Victim:** [{name}](https://huggingface.co/{name}) at revision `{rev}`, on CPU, "
-        f"licence: {info.get('victim_license') or 'see its model card'}. Input: the document "
-        f"only. Documents longer than {tf.window} tokens use a sliding window ({tf.window} "
-        f"tokens, stride {tf.stride}); the score is the maximum injection probability over the "
-        "windows.",
+        f"- **Victim:** base [{name}](https://huggingface.co/{name}) at revision `{rev}`. "
+        f"Licence: {info.get('victim_license') or 'see its model card'}. Input: the fixed "
+        "instruct, the sample's query and the whole document, through its own chat template. "
+        "The score is p(yes) from the two answer-token logits; a malicious variant succeeds "
+        f"below {tf.threshold}, a benign one flips at or above it.",
         "- **Attack:** TextAttack's TextFooler recipe (MIT). Only words inside the inserted text "
         "may change: the attack for attacked samples, the benign text for clean ones. For code, "
         "only the introductory sentence changes and the whole code block is protected. Emails, "
@@ -350,9 +350,13 @@ def _textfooler_section(cfg: Config, reports: dict[str, dict[str, Any]]) -> list
         "- **Only variants that fooled the victim are kept.** A variant is also checked by "
         "rules (only word swaps, caps, protected tokens unchanged, nothing else in the document "
         "changed) and by an LLM judge: an attacked variant must still be judged an injection, "
-        "a clean one must still be judged clean. The judge never writes text.",
-        f"- **Sizes:** classes are equal in every scenario; target {tf.targets} kept variants "
-        "per class and scenario.",
+        "a clean one must still be judged clean. The judge is a local model "
+        f"(`{info.get('judge', tf.judge_model)}`), different from the victim, and never writes "
+        "text.",
+        f"- **Sizes:** target {tf.targets} kept malicious variants per scenario (floor "
+        f"{tf.floor_per_scenario}); the same number of plain benign twins (`control`, copied "
+        "unchanged) and of perturbed benign twins (attacked the same way, kept whether or not "
+        "they fooled the victim). `p_yes_base` is the victim's score on each row.",
         "",
         "### Constraint values",
         "",
@@ -368,7 +372,7 @@ def _textfooler_section(cfg: Config, reports: dict[str, dict[str, Any]]) -> list
                 ],
                 ["maximum fraction of words changed", f"{cap:.0%} of the inserted text"],
                 ["search / goal", f"{c.get('search')} / {c.get('goal')}"],
-                ["window rule", f"{tf.window} tokens, stride {tf.stride}, maximum score"],
+                ["victim prompt", "instruct + query + whole document, no windows"],
             ],
         ),
         "",
@@ -843,7 +847,7 @@ def _count_errors(loaded: dict, configs: list[str], reports: dict, rev: str) -> 
                 errors.append(
                     f"{rev} {c}/{s}: loaded {got.get('rows')} rows, reports say {exp.get(s)}"
                 )
-            if tuple(got.get("columns", ())) != COLUMNS:
+            if tuple(got.get("columns", ())) != columns_for(c):
                 errors.append(f"{rev} {c}/{s}: loaded columns differ from the schema")
     return errors
 

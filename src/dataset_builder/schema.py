@@ -11,7 +11,13 @@ Split = Literal["train", "validation", "test"]
 BipiaScenario = Literal["email", "table", "code"]
 LabelProvenance = Literal["construction", "injection_metadata", "validated"]
 GenerationMethod = Literal[
-    "sampled_insertion", "llm_benign_insertion", "original", "counterfactual", "textfooler"
+    "sampled_insertion",
+    "llm_benign_insertion",
+    "original",
+    "counterfactual",
+    "textfooler",
+    "control",
+    "llm_textfooler_style",
 ]
 Position = Literal["start", "middle", "end"]
 
@@ -37,6 +43,14 @@ NEMOTRON_FIELDS = (
     "sentence_repaired",
 )
 TEXTFOOLER_FIELDS = ("victim_model",)
+# Extra columns of the `bipia_textfooler` config only (v0 files keep their 30 columns).
+TEXTFOOLER_ONLY_FIELDS = (
+    "p_yes_base",
+    "generator_model",
+    "judge_model",
+    "kept_because",
+    "nested_size",
+)
 
 # Allowed generation methods per (source, label).
 _METHODS: dict[tuple[str, int], set[str]] = {
@@ -44,8 +58,8 @@ _METHODS: dict[tuple[str, int], set[str]] = {
     ("bipia", 0): {"llm_benign_insertion"},
     ("nemotron", 1): {"original"},
     ("nemotron", 0): {"counterfactual"},
-    ("bipia_textfooler", 1): {"textfooler"},
-    ("bipia_textfooler", 0): {"textfooler"},
+    ("bipia_textfooler", 1): {"textfooler", "llm_textfooler_style"},
+    ("bipia_textfooler", 0): {"textfooler", "control", "llm_textfooler_style"},
 }
 
 
@@ -115,6 +129,9 @@ class Sample(BaseModel):
         for f in BIPIA_FIELDS + NEMOTRON_FIELDS + TEXTFOOLER_FIELDS:
             if f not in allowed and getattr(self, f) is not None:
                 errors.append(f"{f} must be None for source={self.source}")
+        for f in TEXTFOOLER_ONLY_FIELDS:
+            if self.source != "bipia_textfooler" and getattr(self, f, None) is not None:
+                errors.append(f"{f} must be None for source={self.source}")
         if self.source == "bipia" and self.label == 1:
             for f in ("benign_id", "benign_span", "label_checked"):
                 if getattr(self, f) is not None:
@@ -128,4 +145,20 @@ class Sample(BaseModel):
         return self
 
 
+class TextFoolerSample(Sample):
+    """A `bipia_textfooler` row: the shared columns plus the TextFooler-only ones."""
+
+    p_yes_base: float | None = None  # base Shieldstral's probability of yes on this row
+    generator_model: str | None = None  # P8: the LLM that wrote the variant
+    judge_model: str | None = None  # the model that judged the variant
+    kept_because: Literal["wrong", "random_right"] | None = None  # P8
+    nested_size: int | None = None  # P8: smallest nested subset (500/1000/2000/4000) with the row
+
+
 COLUMNS: tuple[str, ...] = tuple(Sample.model_fields)
+COLUMNS_TEXTFOOLER: tuple[str, ...] = tuple(TextFoolerSample.model_fields)
+
+
+def columns_for(config: str) -> tuple[str, ...]:
+    """Expected parquet columns of a dataset config."""
+    return COLUMNS_TEXTFOOLER if config == "bipia_textfooler" else COLUMNS

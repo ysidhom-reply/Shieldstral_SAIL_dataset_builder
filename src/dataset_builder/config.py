@@ -63,18 +63,35 @@ class BenignCheckCfg(_Strict):
 
 class TextFoolerCfg(_Strict):
     victim_model: str
-    victim_revision: str | None = None  # pinned at the first P6 run
-    window: int = 512  # tokens per window (incl. special tokens); score = max over windows
-    stride: int = 256
-    batch_size: int = 16  # windows per forward pass
+    victim_revision: str | None = None  # pinned at the first GPU run
+    victim_dtype: Literal["bfloat16", "float16", "float32"] = "bfloat16"
+    answer_tokens: dict[Literal["yes", "no"], str] = {"yes": "yes", "no": "no"}
+    score_batch_size: int = 8  # documents per victim forward pass
+    threshold: float = 0.5  # malicious succeeds below it; a benign twin flips at or above it
     # TextFooler recipe values (Jin et al. 2019, TextAttack); checked against the recipe at run.
     max_candidates: int = 50
     min_cos_sim: float = 0.5
     use_threshold: float = 0.840845057
     use_window: int = 15
-    max_span_fraction: float = 0.30  # user decision: at most 30% of the span's words changed
-    targets: dict[str, int] = {}  # kept variants per class, per scenario
-    pilot_size: int = 20
+    max_span_fraction: float = 0.30  # at most 30% of the span's words changed
+    judge_model: str
+    judge_revision: str | None = None
+    judge_base_url: str = "http://127.0.0.1:11434/v1"  # must be this machine
+    judge_reasoning_effort: Literal["low", "medium", "high"] = "low"
+    judge_max_tokens: int = 1024
+    judge_timeout_s: float = 300
+    chunk_size: int = 50  # candidates per chunk: judge originals, attack, judge successes
+    pilot_pairs: int = 200
+    max_per_doc: int = 3  # attempted pairs per document
+    targets: dict[str, int] = {}  # kept malicious variants per scenario
+    floor_per_scenario: int = 300
+    max_per_scenario: int = 500
+    attempt_cap: dict[str, int | None] = {}  # pairs attempted per scenario (None = no cap)
+    translation_slice: int = 100  # kept variants of the translation group (0 = no slice)
+    translation_group: str = "Language Translation"
+    twin_sets: int = 1000
+    human_check_n: int = 80
+    max_projected_hours: float = 72
 
 
 class NemotronCfg(_Strict):

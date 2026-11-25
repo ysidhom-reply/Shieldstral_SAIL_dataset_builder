@@ -373,6 +373,6 @@ def test_run_exit_code_1_on_a_data_failure(files):
     assert p7.run(files)["exit_code"] == p7.EXIT_DATA
 
 
-def test_later_versions_are_not_built(files):
+def test_v2_is_not_built_yet(files):
     with pytest.raises(p7.P7NotReadyError):
-        p7.run(files, version="v1")
+        p7.run(files, version="v2")
