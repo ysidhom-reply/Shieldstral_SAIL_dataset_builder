@@ -12,6 +12,7 @@ wheels/
 
 # --- Virtual environments (uv creates .venv) ---
 .venv/
+.venv-p6/
 venv/
 env/
 
@@ -64,3 +65,6 @@ desktop.ini
 
 # --- Claude Code local settings ---
 .claude/settings.local.json
+
+# --- Local model weights (downloaded from Hugging Face) ---
+models/

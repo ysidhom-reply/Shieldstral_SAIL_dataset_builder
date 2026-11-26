@@ -5,13 +5,19 @@ at the span's position and scores the WHOLE document (instruct + query + documen
 Shieldstral. Only words outside the protected tokens may change, and at most `max_span_fraction`
 of the span's words.
 
-TextAttack (and its TensorFlow sentence encoder) live in their own environment, see
+TextAttack (and its TensorFlow sentence encoder) live in their own environment (.venv-p6), see
 requirements/p6-textfooler.txt. The import is lazy: tests use a fake `Engine`.
+
+TextAttack imports flair at start-up, and flair does not work with transformers 5 (which
+Shieldstral needs). TextFooler never uses flair (its part-of-speech check uses NLTK), so when flair
+cannot be imported a stand-in module is registered that fails loudly if anything calls it.
 """
 
 import importlib.metadata
 import logging
 import os
+import sys
+import types
 from collections.abc import Sequence
 from typing import Any, Protocol
 
@@ -21,10 +27,37 @@ from dataset_builder.steps.p6_victim import CachedScorer, Item
 
 logger = logging.getLogger(__name__)
 
-RUN_HINT = (
-    "uv run --isolated --no-project --with-editable . --with-requirements "
-    "requirements/p6-textfooler.txt dataset-builder p6-textfooler"
-)
+RUN_HINT = ".venv-p6/Scripts/dataset-builder p6-textfooler (see requirements/p6-textfooler.txt)"
+
+
+def flair_stand_in() -> bool:
+    """Register a stand-in `flair` if the real one cannot be imported. True if registered."""
+    try:
+        import flair  # noqa: F401
+    except Exception:  # flair fails with ImportError or AttributeError
+        for name in [m for m in sys.modules if m == "flair" or m.startswith("flair.")]:
+            del sys.modules[name]
+    else:
+        return False
+
+    class Unavailable:
+        def __init__(self, *a: Any, **k: Any) -> None:
+            raise RuntimeError("flair is not available here; TextFooler uses the NLTK tagger")
+
+        @classmethod
+        def load(cls, *a: Any, **k: Any) -> Any:
+            cls()
+
+    root = types.ModuleType("flair")
+    data = types.ModuleType("flair.data")
+    models = types.ModuleType("flair.models")
+    data.Sentence = Unavailable  # type: ignore[attr-defined]
+    data.Tokenizer = type("Tokenizer", (), {})  # type: ignore[attr-defined]  # a base class
+    models.SequenceTagger = Unavailable  # type: ignore[attr-defined]
+    root.device = None  # type: ignore[attr-defined]
+    root.data, root.models = data, models  # type: ignore[attr-defined]
+    sys.modules.update({"flair": root, "flair.data": data, "flair.models": models})
+    return True
 
 
 class Engine(Protocol):
@@ -54,6 +87,8 @@ def boundary_shift(p: float, threshold: float) -> float:
 class TextFoolerEngine:
     def __init__(self, tf: TextFoolerCfg, scorer: CachedScorer) -> None:
         os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+        if flair_stand_in():
+            logger.info("flair not importable: stand-in registered (TextFooler does not use it)")
         try:
             import numpy as np
             import textattack  # noqa: F401
@@ -124,6 +159,10 @@ class TextFoolerEngine:
             recipe.transformation,
             recipe.search_method,
         )
+
+    def release(self) -> None:
+        """Free the victim's GPU memory before the judge phase."""
+        self.scorer.release()
 
     def attack(
         self,

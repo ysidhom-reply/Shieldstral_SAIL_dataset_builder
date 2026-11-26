@@ -11,9 +11,14 @@ What this step does, per run:
    them harmless);
 4. a counts report, the data/out file and a CSV for the human check are written.
 
-Work goes in chunks (judge the originals, attack, judge the successes) so the victim and the judge
-alternate per chunk, never per example. Every candidate's outcome is appended to
-data/interim/p6_results[_pilot].jsonl, so a stopped run resumes.
+Work goes in rounds of a few hundred candidates, with one model on the GPU at a time:
+- victim phase (Shieldstral loaded): score the originals, attack, apply the rules; every outcome is
+  saved, the successes as `pending_judge`. Then the victim is unloaded;
+- judge phase (gpt-oss loaded): for each success, the judge must agree with the label on the
+  original, then accept the variant. Then the judge is unloaded.
+The size of the next round comes from the keep rate seen so far. Every outcome is appended to
+data/interim/p6_results[_pilot].jsonl, so a stopped run resumes (a `pending_judge` line is judged
+first).
 
 The attack, the pilot and the full run need a GPU: this module only wires them. Models are given
 to `run` (tests pass fakes); by default they are built from the config.
@@ -34,7 +39,7 @@ from dataset_builder.reports import CountMismatchError
 from dataset_builder.schema import TextFoolerSample
 from dataset_builder.steps import p6_report
 from dataset_builder.steps.p6_attack import Engine, TextFoolerEngine
-from dataset_builder.steps.p6_judge import Judge, LocalJudge
+from dataset_builder.steps.p6_judge import Judge, build_judge
 from dataset_builder.steps.p6_sampling import (
     SCENARIOS,
     attempt_orders,
@@ -58,10 +63,11 @@ logger = logging.getLogger(__name__)
 # Outcomes of one candidate, in the order they are decided.
 STATUSES = (
     "no_editable",  # no word of the span may be changed (all protected)
-    "judge_disagrees",  # the judge disagrees with the label on the original (or gave no answer)
     "skipped",  # malicious: the victim already misses the original, nothing to flip
     "failed",  # the attack did not reach the goal (malicious only)
     "rule_rejected",  # a rule check failed (malicious: after a success)
+    "pending_judge",  # waiting for the judge phase (only in the results file between phases)
+    "judge_disagrees",  # the judge disagrees with the label on the original (or gave no answer)
     "judge_rejected",  # the judge says the meaning or the label changed
     "kept",
 )
@@ -71,83 +77,63 @@ def variant_id(prefix: str, source_id: str, salt: str = "") -> str:
     return prefix + hashlib.sha256(f"{source_id}|{salt}".encode()).hexdigest()[:16]
 
 
-# ---------------------------------------------------------------- one chunk of candidates
+# ---------------------------------------------------------------- the two phases of a round
 
 
-def process_chunk(
+def victim_phase(
     items: list[dict[str, Any]],
     engine: Engine,
-    judge: Judge,
     tf: TextFoolerCfg,
     benign: dict[str, str],
     entities: Callable[[str], list[str]] | None,
 ) -> list[dict[str, Any]]:
-    """Candidates of one chunk, end to end.
+    """Victim work for a batch of candidates: score the originals, attack, apply the rules.
 
     Each item: {"kind": "malicious" | "twin", "row": <bipia row>, "pair_id", "doc"}. Returns one
-    record per item (the lines of p6_results.jsonl). Three phases: the judge reads the originals,
-    the victim attacks, the judge reads the successes."""
+    record per item (the lines of p6_results.jsonl). A success ends as `pending_judge`."""
     recs: list[dict[str, Any]] = []
-    live: list[dict[str, Any]] = []
+    spans: list[tuple[Any, list[str]]] = []
     for it in items:
         row = it["row"]
-        label = int(row["label"])
         span = locate_span(row, benign.get(row.get("benign_id") or ""))
         tokens = protected_tokens(span.text, entities)
-        rec = {
-            "key": f"{it['kind']}:{row['sample_id']}",
-            "kind": it["kind"],
-            "sample_id": row["sample_id"],
-            "pair_id": it["pair_id"],
-            "doc": it["doc"],
-            "scenario": row["scenario"],
-            "label": label,
-            "attack_group": row.get("attack_group"),
-            "position": row.get("position"),
-            "span": span.text,
-            "inserted": span.inserted(),
-            "protected_tokens": tokens,
-            "n_words": len(WORD.findall(span.text)),
-            "seconds": 0.0,
-        }
-        recs.append(rec)
+        spans.append((span, tokens))
+        recs.append(
+            {
+                "key": f"{it['kind']}:{row['sample_id']}",
+                "kind": it["kind"],
+                "sample_id": row["sample_id"],
+                "pair_id": it["pair_id"],
+                "doc": it["doc"],
+                "scenario": row["scenario"],
+                "label": int(row["label"]),
+                "attack_group": row.get("attack_group"),
+                "position": row.get("position"),
+                "span": span.text,
+                "inserted": span.inserted(),
+                "protected_tokens": tokens,
+                "n_words": len(WORD.findall(span.text)),
+                "seconds": 0.0,
+            }
+        )
+    # every original is scored: a twin's score is also its plain control's score
+    p0 = engine.score(
+        [(it["row"]["instruct"], it["row"]["query"], it["row"]["document"]) for it in items]
+    )
+    thr = tf.threshold
+    for it, rec, (span, tokens), p_orig in zip(items, recs, spans, p0, strict=True):
+        rec["p_orig"] = p_orig
         if not modifiable_indices(WORD.findall(span.text), tokens):
             rec["status"] = "no_editable"
-        else:
-            live.append({"rec": rec, "row": row, "span": span, "tokens": tokens})
-
-    # phase 1: the judge must agree with the label on the original
-    t0 = time.monotonic()
-    vs = judge.verdicts(
-        [(x["span"].inserted(),) * 2 + (x["rec"]["label"], x["rec"]["scenario"]) for x in live]
-    )
-    judge_s = time.monotonic() - t0
-    attack: list[dict[str, Any]] = []
-    for x, v in zip(live, vs, strict=True):
-        if v is None or not v.label_still_correct:
-            x["rec"]["status"] = "judge_disagrees"
-            x["rec"]["original_verdict"] = v.as_dict() if v else None
-        else:
-            attack.append(x)
-
-    # phase 2: score the originals, then attack (victim only)
-    thr = tf.threshold
-    p0 = engine.score(
-        [(x["row"]["instruct"], x["row"]["query"], x["row"]["document"]) for x in attack]
-    )
-    judge_me: list[dict[str, Any]] = []
-    for x, p_orig in zip(attack, p0, strict=True):
-        rec, row, span = x["rec"], x["row"], x["span"]
-        rec["p_orig"] = p_orig
+            continue
         if rec["kind"] == "malicious" and p_orig < thr:
             rec["status"] = "skipped"  # already missed: no prediction to change
             continue
         # a twin the victim already calls positive has nothing to flip: perturb without feedback
         feedback = rec["kind"] == "malicious" or p_orig < thr
+        row = it["row"]
         t1 = time.monotonic()
-        out = engine.attack(
-            span, rec["label"], x["tokens"], row["instruct"], row["query"], feedback
-        )
+        out = engine.attack(span, rec["label"], tokens, row["instruct"], row["query"], feedback)
         rec["seconds"] += time.monotonic() - t1
         rec |= {
             "queries": out["queries"],
@@ -160,32 +146,65 @@ def process_chunk(
             continue
         if rec["kind"] == "twin":
             rec["flipped"] = out["p_new"] >= thr
-        reason, changed, _ = check_variant(span, out["text"], x["tokens"], tf.max_span_fraction)
+        reason, changed, _ = check_variant(span, out["text"], tokens, tf.max_span_fraction)
         rec["words_changed"] = changed
         if reason:
             rec["status"], rec["reason"] = "rule_rejected", reason
             continue
-        judge_me.append(x)
+        rec["status"] = "pending_judge"
+    for rec in recs:
+        rec["seconds"] = round(rec["seconds"], 3)
+    return recs
 
-    # phase 3: the judge reads what succeeded
+
+def modified_text(rec: dict[str, Any]) -> str:
+    """The inserted text with the attacked span (works from the saved record alone)."""
+    return rec["new_span"] + rec["inserted"][len(rec["span"]) :]
+
+
+def judge_phase(recs: list[dict[str, Any]], judge: Judge) -> list[dict[str, Any]]:
+    """Judge the `pending_judge` records in one call (the judge loads once). For each: the label
+    on the original first (passed as both texts), then the variant. Updates the records."""
+    if not recs:
+        return recs
+    queries = []
+    for r in recs:
+        queries.append((r["inserted"], r["inserted"], r["label"], r["scenario"]))
+        queries.append((r["inserted"], modified_text(r), r["label"], r["scenario"]))
     t0 = time.monotonic()
-    vs = judge.verdicts(
-        [
-            (
-                x["span"].inserted(),
-                x["span"].inserted(x["rec"]["new_span"]),
-                x["rec"]["label"],
-                x["rec"]["scenario"],
-            )
-            for x in judge_me
-        ]
-    )
-    judge_s += time.monotonic() - t0
-    for x, v in zip(judge_me, vs, strict=True):
-        x["rec"]["verdict"] = v.as_dict() if v else None
-        x["rec"]["status"] = "kept" if v is not None and v.accepted else "judge_rejected"
-    for rec in recs:  # the judge's time is shared evenly (it ran in a batch)
-        rec["seconds"] = round(rec["seconds"] + judge_s / max(len(recs), 1), 3)
+    vs = judge.verdicts(queries)
+    share = (time.monotonic() - t0) / len(recs)  # the judge ran in a batch: time shared evenly
+    for i, r in enumerate(recs):
+        v_orig, v = vs[2 * i], vs[2 * i + 1]
+        r["original_verdict"] = v_orig.as_dict() if v_orig else None
+        r["verdict"] = v.as_dict() if v else None
+        if v_orig is None or not v_orig.label_still_correct:
+            r["status"] = "judge_disagrees"
+        else:
+            r["status"] = "kept" if v is not None and v.accepted else "judge_rejected"
+        r["seconds"] = round(r["seconds"] + share, 3)
+    return recs
+
+
+def release(model: Any) -> None:
+    """Free a model's GPU memory if it can (fakes and servers cannot)."""
+    fn = getattr(model, "release", None)
+    if callable(fn):
+        fn()
+
+
+def process_round(
+    items: list[dict[str, Any]],
+    engine: Engine,
+    judge: Judge,
+    tf: TextFoolerCfg,
+    benign: dict[str, str],
+    entities: Callable[[str], list[str]] | None,
+) -> list[dict[str, Any]]:
+    """Both phases on a batch, without saving (the runner saves between phases)."""
+    recs = victim_phase(items, engine, tf, benign, entities)
+    release(engine)
+    judge_phase([r for r in recs if r["status"] == "pending_judge"], judge)
     return recs
 
 
@@ -217,8 +236,18 @@ def effective_targets(
     return out
 
 
+def round_take(remaining: int, done: int, kept: int, share: int) -> int:
+    """Candidates to attempt next for `remaining` kept ones: from the keep rate seen so far, at
+    most `share`. Before anything was kept the whole share is tried."""
+    if remaining <= 0:
+        return 0
+    if done == 0 or kept == 0:
+        return share
+    return max(min(-(-remaining * done // kept), share), 1)
+
+
 class Runner:
-    """Holds what the loops share: models, config, the results file."""
+    """Holds what the rounds share: models, config, the results file."""
 
     def __init__(
         self,
@@ -233,23 +262,29 @@ class Runner:
         self.cfg, self.tf = cfg, cfg.textfooler
         self.engine, self.judge, self.benign, self.entities = engine, judge, benign, entities
         self.results, self.path = results, path
+        self.rounds = 0
+
+    def _save(self, recs: list[dict[str, Any]]) -> None:
+        for r in recs:
+            self.results[r["key"]] = r
+        append_results(self.path, recs)
 
     def work(self, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """One round: the victim phase on the new items (saved every `chunk_size`), the victim
+        unloaded, then the judge phase on everything pending (this round and any resumed one)."""
         todo = [it for it in items if f"{it['kind']}:{it['row']['sample_id']}" not in self.results]
         recs: list[dict[str, Any]] = []
         for i in range(0, len(todo), self.tf.chunk_size):
-            chunk = process_chunk(
-                todo[i : i + self.tf.chunk_size],
-                self.engine,
-                self.judge,
-                self.tf,
-                self.benign,
-                self.entities,
+            chunk = victim_phase(
+                todo[i : i + self.tf.chunk_size], self.engine, self.tf, self.benign, self.entities
             )
-            for r in chunk:
-                self.results[r["key"]] = r
-            append_results(self.path, chunk)
+            self._save(chunk)
             recs += chunk
+        release(self.engine)
+        pending = [r for r in self.results.values() if r["status"] == "pending_judge"]
+        if pending:
+            self._save(judge_phase(pending, self.judge))
+        self.rounds += 1
         return recs
 
     def kept(self, kind: str, scenario: str, pair_ids: set[str] | None = None) -> int:
@@ -262,17 +297,22 @@ class Runner:
             and (pair_ids is None or r["pair_id"] in pair_ids)
         )
 
+    def done(self, kind: str, scenario: str, pair_ids: set[str]) -> int:
+        return sum(
+            1
+            for r in self.results.values()
+            if r["kind"] == kind and r["scenario"] == scenario and r["pair_id"] in pair_ids
+        )
+
     def malicious(
         self, orders: dict[str, list[dict[str, Any]]], targets: dict[str, int], redistribute: bool
     ) -> None:
-        """Attack positives in each scenario's order until its target of kept variants."""
+        """Rounds of positives, all scenarios together, until each reaches its target of kept
+        variants or runs out of candidates."""
         cursor = dict.fromkeys(SCENARIOS, 0)
-        share = max(self.tf.chunk_size // len(SCENARIOS), 1)
-        last = time.monotonic()
+        ids = {s: {p["pair_id"] for p in orders[s]} for s in SCENARIOS}
         while True:
-            kept = {
-                s: self.kept("malicious", s, {p["pair_id"] for p in orders[s]}) for s in SCENARIOS
-            }
+            kept = {s: self.kept("malicious", s, ids[s]) for s in SCENARIOS}
             exhausted = {s for s in SCENARIOS if cursor[s] >= len(orders[s])}
             eff = (
                 effective_targets(targets, kept, exhausted, self.tf.max_per_scenario)
@@ -282,39 +322,45 @@ class Runner:
             active = [s for s in SCENARIOS if kept[s] < eff.get(s, 0) and s not in exhausted]
             if not active:
                 return
+            share = max(self.tf.round_size // len(active), 1)
             items = []
             for s in active:
-                take = orders[s][cursor[s] : cursor[s] + share]
+                n = round_take(eff[s] - kept[s], self.done("malicious", s, ids[s]), kept[s], share)
+                take = orders[s][cursor[s] : cursor[s] + n]
                 cursor[s] += len(take)
                 items += [
                     {"kind": "malicious", "row": p["pos"], "pair_id": p["pair_id"], "doc": p["doc"]}
                     for p in take
                 ]
             self.work(items)
-            if time.monotonic() - last > 60:
-                last = time.monotonic()
-                logger.info("P6 kept: %s | processed %d", kept, len(self.results))
+            logger.info("P6 round %d, kept: %s", self.rounds, kept)
 
     def twins(
         self, kept_pairs: dict[str, list[dict[str, Any]]], rest: dict[str, list[dict[str, Any]]]
     ) -> None:
-        """Perturbed twins: as many kept twins per scenario as kept positives. The twins of the
-        kept positives come first; a twin the judge rejects is replaced by the next pair's."""
-        for s in SCENARIOS:
-            need = len(kept_pairs[s])
-            queue = [*kept_pairs[s], *rest[s]]
-            i = 0
-            ids = {p["pair_id"] for p in queue}
-            while self.kept("twin", s, ids) < need and i < len(queue):
-                take = need - self.kept("twin", s, ids)
-                batch = queue[i : i + max(take, 1)]
-                i += len(batch)
-                self.work(
-                    [
-                        {"kind": "twin", "row": p["neg"], "pair_id": p["pair_id"], "doc": p["doc"]}
-                        for p in batch
-                    ]
-                )
+        """Perturbed twins: as many kept twins per scenario as kept positives. The first round
+        takes the kept positives' twins; a twin the judge rejects is replaced in a later round by
+        the next pair's."""
+        queue = {s: [*kept_pairs[s], *rest[s]] for s in SCENARIOS}
+        ids = {s: {p["pair_id"] for p in queue[s]} for s in SCENARIOS}
+        need = {s: len(kept_pairs[s]) for s in SCENARIOS}
+        cursor = dict.fromkeys(SCENARIOS, 0)
+        while True:
+            kept = {s: self.kept("twin", s, ids[s]) for s in SCENARIOS}
+            active = [s for s in SCENARIOS if kept[s] < need[s] and cursor[s] < len(queue[s])]
+            if not active:
+                return
+            items = []
+            for s in active:
+                done = self.done("twin", s, ids[s])
+                n = need[s] if done == 0 else round_take(need[s] - kept[s], done, kept[s], need[s])
+                take = queue[s][cursor[s] : cursor[s] + n]
+                cursor[s] += len(take)
+                items += [
+                    {"kind": "twin", "row": p["neg"], "pair_id": p["pair_id"], "doc": p["doc"]}
+                    for p in take
+                ]
+            self.work(items)
 
 
 # ---------------------------------------------------------------- assembly
@@ -325,7 +371,6 @@ def _variant_row(
     rec: dict[str, Any],
     benign: dict[str, str],
     scorer_name: str,
-    judge_name: str,
     method: str,
     prefix: str,
 ) -> TextFoolerSample:
@@ -342,7 +387,6 @@ def _variant_row(
         "protected_tokens": rec["protected_tokens"],
         "victim_model": scorer_name,
         "p_yes_base": rec["p_new"],
-        "judge_model": judge_name,
     }
     if rec["label"] == 1:
         fields["injection_span"] = span.inserted(new)
@@ -360,29 +404,33 @@ def assemble(
     twin_cap: int,
 ) -> tuple[list[TextFoolerSample], dict[str, Any]]:
     """The rows of data/out: kept malicious variants, plain twins and perturbed twins."""
-    judge_name = runner.judge.name
     kept_mal = [
         r for r in runner.results.values() if r["kind"] == "malicious" and r["status"] == "kept"
     ]
     rows: list[TextFoolerSample] = []
     for r in kept_mal:
         rows.append(
-            _variant_row(
-                sources[r["sample_id"]], r, runner.benign, victim, judge_name, "textfooler", "tf-"
-            )
+            _variant_row(sources[r["sample_id"]], r, runner.benign, victim, "textfooler", "tf-")
         )
     main = [r for r in kept_mal if r["attack_group"] != runner.tf.translation_group]
     counts: dict[str, Any] = {"malicious_kept": Counter(r["scenario"] for r in kept_mal)}
     # controls: the benign twins of the kept (main) positives, copied unchanged
-    controls = []
-    for r in main:
-        neg = pairs_by_id[r["pair_id"]]["neg"]
-        controls.append(neg)
-    ps = (
-        runner.engine.score([(n["instruct"], n["query"], n["document"]) for n in controls])
-        if controls
-        else []
-    )
+    controls = [pairs_by_id[r["pair_id"]]["neg"] for r in main]
+    saved = {
+        r["sample_id"]: r["p_orig"]
+        for r in runner.results.values()
+        if r["kind"] == "twin" and r.get("p_orig") is not None
+    }
+    missing = [n for n in controls if n["sample_id"] not in saved]
+    if missing:  # a twin never attempted: score it now (reloads the victim once)
+        for n, p in zip(
+            missing,
+            runner.engine.score([(n["instruct"], n["query"], n["document"]) for n in missing]),
+            strict=True,
+        ):
+            saved[n["sample_id"]] = p
+        release(runner.engine)
+    ps = [saved[n["sample_id"]] for n in controls]
     control_p: list[tuple[str, float]] = []  # (document, p(yes)) for the false-positive rate
     for r, neg, p in zip(main, controls, ps, strict=True):
         control_p.append((r["doc"], p))
@@ -408,9 +456,7 @@ def assemble(
         chosen += pool[: need[s]]
     for r in chosen:
         rows.append(
-            _variant_row(
-                sources[r["sample_id"]], r, runner.benign, victim, judge_name, "textfooler", "tfb-"
-            )
+            _variant_row(sources[r["sample_id"]], r, runner.benign, victim, "textfooler", "tfb-")
         )
     counts |= {"control": len(controls), "perturbed_twins": len(chosen), "twin_cap": twin_cap}
     counts["control_p"] = control_p
@@ -422,7 +468,7 @@ def assemble(
 
 def build_models(cfg: Config) -> tuple[Engine, Judge]:
     scorer = CachedScorer(ShieldstralScorer(cfg.textfooler))
-    return TextFoolerEngine(cfg.textfooler, scorer), LocalJudge(cfg.textfooler)
+    return TextFoolerEngine(cfg.textfooler, scorer), build_judge(cfg.textfooler)
 
 
 def run(
@@ -464,15 +510,10 @@ def run(
     if is_pilot:
         sample = pilot_pairs(pairs, cfg)
         orders = {s: [p for p in sample if p["scenario"] == s] for s in SCENARIOS}
-        runner.work(
+        runner.work(  # one round: positives and their twins together
             [
-                {"kind": "malicious", "row": p["pos"], "pair_id": p["pair_id"], "doc": p["doc"]}
-                for p in sample
-            ]
-        )
-        runner.work(
-            [
-                {"kind": "twin", "row": p["neg"], "pair_id": p["pair_id"], "doc": p["doc"]}
+                {"kind": kind, "row": p[key], "pair_id": p["pair_id"], "doc": p["doc"]}
+                for kind, key in (("malicious", "pos"), ("twin", "neg"))
                 for p in sample
             ]
         )

@@ -63,7 +63,8 @@ class BenignCheckCfg(_Strict):
 
 class TextFoolerCfg(_Strict):
     victim_model: str
-    victim_revision: str | None = None  # pinned at the first GPU run
+    victim_revision: str | None = None  # pinned Hugging Face commit
+    victim_path: Path | None = None  # local weights at that revision (None = download)
     victim_dtype: Literal["bfloat16", "float16", "float32"] = "bfloat16"
     answer_tokens: dict[Literal["yes", "no"], str] = {"yes": "yes", "no": "no"}
     score_batch_size: int = 8  # documents per victim forward pass
@@ -76,11 +77,16 @@ class TextFoolerCfg(_Strict):
     max_span_fraction: float = 0.30  # at most 30% of the span's words changed
     judge_model: str
     judge_revision: str | None = None
+    judge_path: Path | None = None  # local weights (pinned download)
+    judge_backend: Literal["transformers", "server"] = "transformers"  # in-process or local server
+    judge_batch_size: int = 8  # prompts per generate call (transformers backend)
+    judge_keep_loaded: bool = False  # False: free the GPU after each judge phase
     judge_base_url: str = "http://127.0.0.1:11434/v1"  # must be this machine
     judge_reasoning_effort: Literal["low", "medium", "high"] = "low"
     judge_max_tokens: int = 1024
     judge_timeout_s: float = 300
-    chunk_size: int = 50  # candidates per chunk: judge originals, attack, judge successes
+    round_size: int = 300  # candidates per round: victim phase, then judge phase
+    chunk_size: int = 50  # the victim phase saves its results every this many candidates
     pilot_pairs: int = 200
     max_per_doc: int = 3  # attempted pairs per document
     targets: dict[str, int] = {}  # kept malicious variants per scenario
@@ -92,6 +98,14 @@ class TextFoolerCfg(_Strict):
     twin_sets: int = 1000
     human_check_n: int = 80
     max_projected_hours: float = 72
+
+
+class GeneratorCfg(_Strict):
+    """P8: the local LLM that writes training variants."""
+
+    model: str
+    revision: str | None = None
+    path: Path | None = None
 
 
 class NemotronCfg(_Strict):
@@ -215,6 +229,7 @@ class Config(_Strict):
     bipia: BipiaCfg
     benign_check: BenignCheckCfg
     textfooler: TextFoolerCfg
+    generator: GeneratorCfg | None = None
     nemotron: NemotronCfg
     p3: P3Cfg
     p4: P4Cfg
@@ -236,7 +251,27 @@ def load_config(path: Path = DEFAULT_CONFIG) -> Config:
     )
     pr = cfg.p3.prompts
     p3 = cfg.p3.model_copy(update={"prompts": pr if pr.is_absolute() else root / pr})
-    return cfg.model_copy(update={"paths": PathsCfg(**resolved), "nemotron": nem, "p3": p3})
+
+    def under_root(p: Path | None) -> Path | None:
+        return p if p is None or p.is_absolute() else root / p
+
+    tf = cfg.textfooler.model_copy(
+        update={
+            "victim_path": under_root(cfg.textfooler.victim_path),
+            "judge_path": under_root(cfg.textfooler.judge_path),
+        }
+    )
+    update: dict[str, Any] = {
+        "paths": PathsCfg(**resolved),
+        "nemotron": nem,
+        "p3": p3,
+        "textfooler": tf,
+    }
+    if cfg.generator is not None:
+        update["generator"] = cfg.generator.model_copy(
+            update={"path": under_root(cfg.generator.path)}
+        )
+    return cfg.model_copy(update=update)
 
 
 def _read_dotenv(path: Path) -> dict[str, str]:

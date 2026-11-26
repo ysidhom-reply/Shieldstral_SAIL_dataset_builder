@@ -87,7 +87,8 @@ def data(cfg):
             "targets": {"email": 3, "table": 3, "code": 3},
             "floor_per_scenario": 2,
             "max_per_scenario": 5,
-            "chunk_size": 6,
+            "round_size": 6,
+            "chunk_size": 4,
             "pilot_pairs": 9,
             "max_per_doc": 2,
             "translation_slice": 3,
@@ -172,13 +173,23 @@ def test_p_yes_from_logits_is_a_two_way_softmax():
     assert p_yes_from_logits(-1000.0, -1001.0) == pytest.approx(math.e / (math.e + 1))
 
 
-def test_answer_tokens_must_be_one_token_each():
-    enc = {"yes": [11], "no": [12]}
-    assert resolve_answer_ids(lambda w: enc[w], {"yes": "yes", "no": "no"}) == {"yes": 11, "no": 12}
-    with pytest.raises(ValueError, match="2 tokens"):
-        resolve_answer_ids(lambda w: [1, 2], {"yes": "yes", "no": "no"})
-    with pytest.raises(ValueError, match="same token"):
-        resolve_answer_ids(lambda w: [7], {"yes": "yes", "no": "no"})
+def test_answer_tokens_are_every_token_that_reads_yes_or_no():
+    vocab = ["a", "yes", " Yes", "yes.", "no", " NO", '"no"', "nope", "yesterday"]
+    ids = resolve_answer_ids(lambda i: vocab[i], len(vocab), {"yes": "yes", "no": "no"})
+    assert ids == {"yes": [1, 2, 3], "no": [4, 5, 6]}
+    with pytest.raises(ValueError, match="no token reads"):
+        resolve_answer_ids(lambda i: "a", 3, {"yes": "yes", "no": "no"})
+    with pytest.raises(ValueError, match="same"):
+        resolve_answer_ids(lambda i: "a", 3, {"yes": "yes", "no": "Yes"})
+
+
+def test_shieldstral_prompt_follows_the_model_card():
+    from dataset_builder.steps.p6_victim import SYSTEM_PROMPT, build_messages, left_pad
+
+    sys_msg, user = build_messages("INS", "Q?", "DOC")
+    assert sys_msg == {"role": "system", "content": SYSTEM_PROMPT}
+    assert user["content"] == "<Instruct>: INS\n\n<Query>: Q?\n\n<Document>: DOC"
+    assert left_pad([[1, 2], [3]], 0) == ([[1, 2], [0, 3]], [[1, 1], [0, 1]])
 
 
 def test_cached_scorer_scores_each_document_once():
@@ -332,28 +343,29 @@ def _items(data, scenario, kind):
 
 def test_chunk_outcomes_for_malicious_and_twins(data):
     tf = data.textfooler
-    recs = p6.process_chunk(
+    recs = p6.process_round(
         _items(data, "email", "malicious"), FakeEngine(), FakeJudge(), tf, {}, None
     )
     assert {r["status"] for r in recs} == {"kept"} and all(
         r["p_new"] < 0.5 <= r["p_orig"] for r in recs
     )
     engine = FakeEngine(fail_every=2)
-    recs = p6.process_chunk(_items(data, "email", "malicious"), engine, FakeJudge(), tf, {}, None)
+    recs = p6.process_round(_items(data, "email", "malicious"), engine, FakeJudge(), tf, {}, None)
     assert Counter_(recs) == {"kept": 2, "failed": 2}
 
-    # a judge that disagrees with the label on the original stops the attack
+    # a judge that disagrees with the label on the original drops the variant (it is asked
+    # after the attack, and only about successes)
     class Disagree(FakeJudge):
         def verdicts(self, q):
             return [Verdict(True, False, "no") for _ in q]
 
     engine = FakeEngine()
-    recs = p6.process_chunk(_items(data, "email", "malicious"), engine, Disagree(), tf, {}, None)
-    assert Counter_(recs) == {"judge_disagrees": 4} and engine.calls == 0
+    recs = p6.process_round(_items(data, "email", "malicious"), engine, Disagree(), tf, {}, None)
+    assert Counter_(recs) == {"judge_disagrees": 4} and engine.calls == 4
     # twins are kept whether or not they flipped; the judge must still find them harmless
-    recs = p6.process_chunk(_items(data, "email", "twin"), FakeEngine(), FakeJudge(), tf, {}, None)
+    recs = p6.process_round(_items(data, "email", "twin"), FakeEngine(), FakeJudge(), tf, {}, None)
     assert Counter_(recs) == {"kept": 4} and all(r["flipped"] for r in recs)
-    recs = p6.process_chunk(
+    recs = p6.process_round(
         _items(data, "email", "twin"), FakeEngine(), FakeJudge(reject_session=True), tf, {}, None
     )
     assert Counter_(recs) == {"judge_rejected": 4}
@@ -371,7 +383,7 @@ def test_a_malicious_original_the_victim_already_misses_is_skipped(data):
             return [0.1 for _ in items]
 
     engine = Blind()
-    recs = p6.process_chunk(
+    recs = p6.process_round(
         _items(data, "email", "malicious"), engine, FakeJudge(), data.textfooler, {}, None
     )
     assert Counter_(recs) == {"skipped": 4} and engine.calls == 0
@@ -383,7 +395,7 @@ def test_a_twin_the_victim_already_flags_is_perturbed_without_feedback(data):
             return [0.8 for _ in items]
 
     engine = Flagging()
-    p6.process_chunk(_items(data, "email", "twin"), engine, FakeJudge(), data.textfooler, {}, None)
+    p6.process_round(_items(data, "email", "twin"), engine, FakeJudge(), data.textfooler, {}, None)
     assert engine.feedback_off == 4
 
 
@@ -410,7 +422,7 @@ def test_full_run_writes_variants_controls_and_perturbed_twins(data):
         [r for r in by[("textfooler", 1)] if r["attack_group"] != "Language Translation"]
     )
     for r in by[("textfooler", 1)]:
-        assert r["judge_model"] == "fake-judge" and r["p_yes_base"] < 0.5
+        assert "judge_model" not in r and r["p_yes_base"] < 0.5
         assert r["document"] != src[r["parent_id"]]["document"] and r["injection_span"]
     for r in by[("control", 0)]:
         parent = src[r["parent_id"]]  # a plain twin is the negative, unchanged
@@ -553,7 +565,7 @@ def test_human_check_csv_and_agreement(data):
 def test_textfooler_columns_exist_only_for_that_config(cfg):
     pos, _ = _pair(0, 0, "email", cfg)
     base = pos.model_dump() | {"source": "bipia_textfooler", "generation_method": "textfooler"}
-    TextFoolerSample(**base, p_yes_base=0.2, judge_model="j")
+    TextFoolerSample(**base, p_yes_base=0.2)
     with pytest.raises(ValueError):
         Sample(**base | {"p_yes_base": 0.2})
     assert columns_for("bipia") == tuple(Sample.model_fields)
@@ -604,3 +616,83 @@ def test_p7_textfooler_checks_pass_on_a_real_run_and_catch_tampering(data):
     victim["p_yes_base"] = 0.9
     broken = {c["check"]: c["status"] for c in p7_checks.check_textfooler(data, test, bad)}
     assert broken["textfooler: p_yes_base set; malicious variants below threshold"] == "FAIL"
+
+
+def test_final_channel_keeps_the_final_answer():
+    from dataset_builder.steps.p6_judge import final_channel, parse_verdict
+
+    raw = (
+        '<|channel|>analysis<|message|>Think: {"same_meaning": false, '
+        '"label_still_correct": false}<|end|><|start|>assistant<|channel|>final<|message|>'
+        '{"same_meaning": true, "label_still_correct": true, "reason": "ok"}<|return|>'
+    )
+    assert parse_verdict(final_channel(raw)).accepted
+    assert final_channel(" plain ") == "plain"
+
+
+def test_build_judge_picks_the_backend(cfg, tmp_path):
+    from dataset_builder.steps.p6_judge import LocalJudge, TransformersJudge, build_judge
+
+    (tmp_path / "config.json").write_text("{}")
+    tf = cfg.textfooler.model_copy(update={"judge_path": tmp_path, "judge_backend": "transformers"})
+    assert isinstance(build_judge(tf), TransformersJudge)  # nothing loaded until the first call
+    assert build_judge(tf).verdicts([]) == []
+    assert isinstance(build_judge(tf.model_copy(update={"judge_backend": "server"})), LocalJudge)
+    with pytest.raises(RuntimeError):
+        build_judge(tf.model_copy(update={"judge_path": tmp_path / "missing"}))
+
+
+def test_round_take_sizes_the_next_round_from_the_keep_rate():
+    assert p6.round_take(10, 0, 0, 50) == 50  # nothing seen yet: the whole share
+    assert p6.round_take(10, 20, 0, 50) == 50  # nothing kept yet: the whole share
+    assert p6.round_take(10, 20, 10, 50) == 20  # half kept: twice the remainder
+    assert p6.round_take(100, 20, 10, 50) == 50  # never more than the share
+    assert p6.round_take(0, 20, 10, 50) == 0
+
+
+def test_rounds_alternate_one_model_and_save_pending_before_the_judge(data, tmp_path):
+    events = []
+
+    class Engine(FakeEngine):
+        def score(self, items):
+            events.append("victim")
+            return super().score(items)
+
+        def release(self):
+            events.append("victim released")
+
+    class Judge(FakeJudge):
+        def verdicts(self, queries):
+            events.append("judge")
+            return super().verdicts(queries)
+
+    path = tmp_path / "results.jsonl"
+    runner = p6.Runner(data, Engine(), Judge(), {}, None, {}, path)
+    runner.work(_items(data, "email", "malicious"))
+    # the victim phase ends with the victim released; the judge runs once, after it
+    assert events[-2:] == ["victim released", "judge"] and events.count("judge") == 1
+    lines = [json.loads(x) for x in path.read_text(encoding="utf-8").splitlines()]
+    assert {x["status"] for x in lines[:4]} == {"pending_judge"}  # saved before the judge
+    assert {x["status"] for x in lines[4:]} == {"kept"}
+    # a run stopped between the phases resumes with the judge phase
+    pending = tmp_path / "pending.jsonl"
+    pending.write_text("\n".join(json.dumps(x) for x in lines[:4]) + "\n", encoding="utf-8")
+    resumed = p6.Runner(data, Engine(), Judge(), {}, None, p6.load_results(pending), pending)
+    resumed.work(_items(data, "email", "malicious"))
+    assert {r["status"] for r in resumed.results.values()} == {"kept"}
+
+
+def test_the_judge_refuses_mxfp4_weights_without_the_kernels(tmp_path, monkeypatch):
+    import importlib.metadata as md
+
+    from dataset_builder.steps.p6_judge import check_mxfp4
+
+    (tmp_path / "config.json").write_text('{"quantization_config": {"quant_method": "mxfp4"}}')
+    monkeypatch.setattr(md, "version", lambda name: "0.19.0")
+    with pytest.raises(RuntimeError, match="kernels"):
+        check_mxfp4(tmp_path)
+    monkeypatch.setattr(md, "version", lambda name: "0.18.3")
+    check_mxfp4(tmp_path)
+    (tmp_path / "config.json").write_text("{}")  # not MXFP4: nothing to check
+    monkeypatch.setattr(md, "version", lambda name: "0.19.0")
+    check_mxfp4(tmp_path)

@@ -43,14 +43,10 @@ NEMOTRON_FIELDS = (
     "sentence_repaired",
 )
 TEXTFOOLER_FIELDS = ("victim_model",)
-# Extra columns of the `bipia_textfooler` config only (v0 files keep their 30 columns).
-TEXTFOOLER_ONLY_FIELDS = (
-    "p_yes_base",
-    "generator_model",
-    "judge_model",
-    "kept_because",
-    "nested_size",
-)
+# Extra column of the `bipia_textfooler` config only (v0 files keep their 30 columns). Values
+# that are the same on every row (judge, generator, attack settings) go in the dataset card;
+# pipeline bookkeeping (judge verdicts, attempt status) stays in data/interim and reports/p6.
+TEXTFOOLER_ONLY_FIELDS = ("p_yes_base",)
 
 # Allowed generation methods per (source, label).
 _METHODS: dict[tuple[str, int], set[str]] = {
@@ -146,13 +142,9 @@ class Sample(BaseModel):
 
 
 class TextFoolerSample(Sample):
-    """A `bipia_textfooler` row: the shared columns plus the TextFooler-only ones."""
+    """A `bipia_textfooler` row: the shared columns plus the TextFooler-only one."""
 
     p_yes_base: float | None = None  # base Shieldstral's probability of yes on this row
-    generator_model: str | None = None  # P8: the LLM that wrote the variant
-    judge_model: str | None = None  # the model that judged the variant
-    kept_because: Literal["wrong", "random_right"] | None = None  # P8
-    nested_size: int | None = None  # P8: smallest nested subset (500/1000/2000/4000) with the row
 
 
 COLUMNS: tuple[str, ...] = tuple(Sample.model_fields)

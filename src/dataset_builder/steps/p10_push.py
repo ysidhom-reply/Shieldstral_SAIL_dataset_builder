@@ -586,7 +586,13 @@ def build_card(
     out += [
         "## Columns",
         "",
-        f"Every config has the same {len(COLUMNS)} columns, in the same order. A model sees "
+        f"Every config has the same {len(COLUMNS)} columns, in the same order"
+        + (
+            "; `bipia_textfooler` adds one, `p_yes_base`, at the end"
+            if "bipia_textfooler" in configs
+            else ""
+        )
+        + ". A model sees "
         "`instruct`, `query` and `document`, and predicts `answer` (`yes` = contains an "
         "injection) or `label` (1 / 0).",
         "",
@@ -609,6 +615,16 @@ def build_card(
                     "BIPIA negatives: the benign text and its [start, end) in `document`",
                 ],
                 ["`protected_tokens`, `victim_model`", "TextFooler variants only"],
+                *(
+                    [
+                        [
+                            "`p_yes_base`",
+                            "`bipia_textfooler` only: base Shieldstral's p(yes) on the row",
+                        ]
+                    ]
+                    if "bipia_textfooler" in configs
+                    else []
+                ),
                 [
                     "Nemotron metadata",
                     "`document_path`, `injection_vector`, `attack_category`, "

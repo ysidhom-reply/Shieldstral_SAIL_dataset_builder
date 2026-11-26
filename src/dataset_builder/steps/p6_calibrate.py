@@ -23,7 +23,7 @@ from typing import Any
 from dataset_builder.config import Config, load_config
 from dataset_builder.io import read_jsonl, read_parquet, rng
 from dataset_builder.reports import report_path
-from dataset_builder.steps.p6_judge import Judge, LocalJudge
+from dataset_builder.steps.p6_judge import Judge, build_judge
 from dataset_builder.steps.p6_sampling import SCENARIOS, make_pairs
 from dataset_builder.steps.p6_span import locate_span
 
@@ -198,7 +198,7 @@ def run(
     cfg: Config | None = None, *, set_b: Path | None = None, judge: Judge | None = None
 ) -> dict[str, Any]:
     cfg = cfg or load_config()
-    judge = judge or LocalJudge(cfg.textfooler)
+    judge = judge or build_judge(cfg.textfooler)
     rows = read_parquet(cfg.paths.out / "bipia" / "test.parquet")
     a = score_set_a(judge, set_a(cfg, rows))
     lines = [

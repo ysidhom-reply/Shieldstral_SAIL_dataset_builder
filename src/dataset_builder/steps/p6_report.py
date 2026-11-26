@@ -18,7 +18,7 @@ from dataset_builder.reports import report_path, write_counts_report
 from dataset_builder.schema import TextFoolerSample
 
 SCENARIOS = ("email", "table", "code")
-SUCCEEDED = ("rule_rejected", "judge_rejected", "kept")
+SUCCEEDED = ("rule_rejected", "judge_disagrees", "judge_rejected", "kept")
 
 
 def _mean(xs: Sequence[float]) -> float:
@@ -281,8 +281,8 @@ def detection_section(
     )
     note = (
         "\n\nReported separately, with 95% intervals from resampling **documents**. Detection on "
-        "originals counts the malicious originals that were scored (not skipped by the judge "
-        "check). Kept variants are fooling by construction. The control rate is over all "
+        "originals counts every malicious original that was scored. Kept variants are "
+        "fooling by construction. The control rate is over all "
         "scenarios together (the controls are the kept positives' twins, copied unchanged)."
     )
     return "Detection and false-positive rates", body + note

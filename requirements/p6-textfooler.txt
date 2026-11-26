@@ -5,8 +5,11 @@
 #
 # Also needed, outside this file:
 #  - a CUDA build of torch matching the driver (install it first, see pytorch.org);
-#  - the judge: a local OpenAI-compatible server with gpt-oss-20b (for example Ollama:
-#    `ollama pull gpt-oss:20b`, served on http://127.0.0.1:11434; the URL must be this machine).
+#  - the judge (gpt-oss-20b) is loaded in the step from `textfooler.judge_path`. Its weights are
+#    MXFP4: without the MXFP4 kernels (packages `kernels` and triton; `triton-windows` on Windows)
+#    transformers expands them to bf16 (about 40 GB), which does not fit a 24 GB GPU.
+#    transformers accepts kernels >=0.18.2,<0.19 only; the judge checks this before loading.
+#  - the weights in models/ (git-ignored), downloaded once at the revisions pinned in the config.
 #
 # OPEN: Shieldstral may need a newer transformers than TextAttack allows. If the first GPU run
 # cannot load it here, score with Shieldstral in the same environment only after checking its model
