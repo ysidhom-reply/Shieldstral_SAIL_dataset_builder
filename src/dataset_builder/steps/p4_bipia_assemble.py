@@ -1,7 +1,7 @@
 """P4. BIPIA: assemble the negatives (label 0) and write the `bipia` config.
 
 For every P2 positive, a P3 pool text for the same document and position replaces the attack:
-same document, position, insert_index, query and instruct, so within a pair only the inserted
+same document, position, insert_index and query, so within a pair only the inserted
 text differs. Output: data/out/bipia/{train,validation,test}.parquet (contract columns only)
 and reports/p4/p4_composition.md.
 """
@@ -131,7 +131,6 @@ def build_negatives(
             split=pos["split"],
             source_split=pos["source_split"],
             scenario=pos["scenario"],
-            instruct=pos["instruct"],
             query=pos["query"],
             document=text,
             label=0,
@@ -189,7 +188,6 @@ def check_pairs(
         n = ns[0]
         same = (
             "query",
-            "instruct",
             "position",
             "insert_index",
             "split",
@@ -214,7 +212,7 @@ def check_pairs(
     if not_one:
         failures.append(f"{len(not_one)} positives without exactly one negative")
     if differ:
-        failures.append(f"{len(differ)} pairs differ in query/instruct/position/insert_index/split")
+        failures.append(f"{len(differ)} pairs differ in query/position/insert_index/split")
     if not_clean:
         failures.append(
             f"{len(not_clean)} pairs where removing the insertion does not give back "
@@ -436,7 +434,7 @@ def _sections(
         "- PASSED: classes 1:1 within each split and scenario; every positive has exactly one "
         "negative with the same parent_id",
         "- PASSED: positions balanced within 1 per split and scenario",
-        "- PASSED: within each pair only the inserted text differs (same query, instruct, "
+        "- PASSED: within each pair only the inserted text differs (same query, "
         "position, insert_index; removing the insertion gives the same clean document)",
         "- PASSED: no negative contains any BIPIA attack text",
         "- PASSED: every negative has an insertion (tables included)",

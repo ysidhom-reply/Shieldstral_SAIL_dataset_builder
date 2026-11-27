@@ -112,7 +112,7 @@ def test_sample_fields(p2cfg):
     assert r["parent_id"].startswith("pair-") and r["sample_id"].startswith("bipia-pos-")
     t = next(r for r in rows if r["scenario"] == "email")
     assert t["protected_tokens"] is None
-    assert 'The user asked: "What is the total?"' in t["query"]
+    assert t["query"] == "What is the total?"  # the user request only
 
 
 def test_deterministic(p2cfg):

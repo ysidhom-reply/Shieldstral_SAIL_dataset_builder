@@ -4,7 +4,8 @@ P7 only reads data/out (plus the interim and raw files it compares against) and 
 reports/p7/p7_checks_<version>.{md,json}. It never changes the data, never loads a model and
 never changes a threshold. The push (P10) for a version needs the report to say PUSH ALLOWED.
 
-v0 = `bipia` (train, validation, test) + `nemotron` (test). v1 and v2 add the TextFooler configs.
+v0 = `bipia` (train, validation, test) + `nemotron` (test). v1 = the same data with `query` = the
+user request only and no `instruct` column. v2 and v3 add the TextFooler configs.
 """
 
 import hashlib
@@ -28,13 +29,15 @@ from dataset_builder.schema import Sample, TextFoolerSample, columns_for
 
 SCOPE: dict[str, dict[str, tuple[str, ...]]] = {
     "v0": {"bipia": ("train", "validation", "test"), "nemotron": ("test",)},
-    "v1": {
+    # v1: the v0 data with `query` = the user request only and no `instruct` column
+    "v1": {"bipia": ("train", "validation", "test"), "nemotron": ("test",)},
+    "v2": {
         "bipia": ("train", "validation", "test"),
         "nemotron": ("test",),
         "bipia_textfooler": ("test",),
     },
 }
-LATER = {"v2": "needs P8 (bipia_textfooler train/val)"}
+LATER = {"v3": "needs P8 (bipia_textfooler train/val)"}
 POSITIONS = ("start", "middle", "end")
 SCEN_ORDER = ("email", "table", "code")
 PRIORITY_MARKERS = ("[PRIORITY MESSAGE]", "[/PRIORITY MESSAGE]")
@@ -436,7 +439,7 @@ def check_pairs(data: dict[str, Rows], docs: Rows) -> list[dict]:
 
 
 def check_queries(cfg: Config, data: dict[str, Rows], docs: Rows) -> list[dict]:
-    """7. Same query and instruct in every pair; test query = the document's first question."""
+    """7. Same query in every pair; test query = the document's first question."""
     by_hash = {(d["split"], doc_hash(d["document"])): d for d in docs}
     differ, not_first = [], []
     for split, rows in data.items():
@@ -444,7 +447,7 @@ def check_queries(cfg: Config, data: dict[str, Rows], docs: Rows) -> list[dict]:
             if not one_each(p):
                 continue  # reported by the pair check
             pos, neg = p[1][0], p[0][0]
-            if (pos["query"], pos["instruct"]) != (neg["query"], neg["instruct"]):
+            if pos["query"] != neg["query"]:
                 differ.append(f"{split}/{key}")
             if split == "test":
                 try:
@@ -456,7 +459,7 @@ def check_queries(cfg: Config, data: dict[str, Rows], docs: Rows) -> list[dict]:
     return [
         result(
             "1",
-            "query: identical query and instruct in every pair",
+            "query: identical query in every pair",
             "bipia",
             differ,
             "positive vs negative",
@@ -1174,7 +1177,7 @@ def render(cfg: Config, version: str, res: dict[str, Any]) -> str:
 
 
 def check_textfooler(cfg: Config, bipia_test: Rows, rows: Rows) -> list[dict]:
-    """The `bipia_textfooler` test config (v1): every row traces to a test sample, only the
+    """The `bipia_textfooler` test config (v2): every row traces to a test sample, only the
     inserted text changed, and only by word swaps within the caps."""
     from dataset_builder.steps.p6_span import check_variant, locate_span
 
@@ -1268,11 +1271,12 @@ def nemotron_goals(cfg: Config) -> dict[int, str]:
     return {r["id"]: r["goal"] for r in load_records(path)} if path.is_file() else {}
 
 
-def run(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
+def run(cfg: Config | None = None, version: str = "v1") -> dict[str, Any]:
     cfg = cfg or load_config()
     if version not in SCOPE:
         raise P7NotReadyError(
-            f"P7 {version}: {LATER.get(version, 'unknown version')}; only v0 and v1 can run now."
+            f"P7 {version}: {LATER.get(version, 'unknown version')}; "
+            "only v0, v1 and v2 can run now."
         )
     scope = SCOPE[version]
     bipia = load(cfg, "bipia", scope["bipia"])
@@ -1297,7 +1301,7 @@ def run(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
     else:
         checks.append(
             result(
-                "1", "TextFooler checks", "bipia_textfooler", None, f"not in {version} (from v1)"
+                "1", "TextFooler checks", "bipia_textfooler", None, f"not in {version} (from v2)"
             )
         )
 

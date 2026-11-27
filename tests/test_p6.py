@@ -8,7 +8,7 @@ import httpx
 import pytest
 
 from dataset_builder.io import read_parquet, write_parquet
-from dataset_builder.schema import Sample, TextFoolerSample, columns_for, instruct_text
+from dataset_builder.schema import Sample, TextFoolerSample, columns_for
 from dataset_builder.steps import p6_calibrate, p6_report, p6_sampling
 from dataset_builder.steps import p6_textfooler as p6
 from dataset_builder.steps.p6_judge import LocalJudge, Verdict, check_local, parse_verdict
@@ -40,7 +40,6 @@ def _pair(doc_i, k, scenario, cfg, group="Language Reply", position="middle"):
         split="test",
         source_split="test",
         scenario=scenario,
-        instruct=instruct_text(cfg),
         query="q",
         position=position,
         insert_index=len(head),

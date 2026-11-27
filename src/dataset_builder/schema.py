@@ -78,8 +78,7 @@ class Sample(BaseModel):
     split: Split
     source_split: str
     scenario: str
-    instruct: str
-    query: str
+    query: str  # the user's request only
     document: str
     label: Literal[0, 1]
     answer: Literal["yes", "no"]
@@ -108,8 +107,6 @@ class Sample(BaseModel):
         errors: list[str] = []
         if self.answer != ("yes" if self.label == 1 else "no"):
             errors.append(f"answer {self.answer!r} does not match label {self.label}")
-        if self.instruct != instruct_text():
-            errors.append("instruct differs from the fixed policy text")
         if self.source != "nemotron" and self.scenario not in BIPIA_SCENARIOS:
             errors.append(f"scenario {self.scenario!r} is not a BIPIA scenario")
         if self.generation_method not in _METHODS[(self.source, self.label)]:
@@ -152,5 +149,25 @@ COLUMNS_TEXTFOOLER: tuple[str, ...] = tuple(TextFoolerSample.model_fields)
 
 
 def columns_for(config: str) -> tuple[str, ...]:
-    """Expected parquet columns of a dataset config."""
+    """Expected parquet columns of a dataset config (local data/out files)."""
     return COLUMNS_TEXTFOOLER if config == "bipia_textfooler" else COLUMNS
+
+
+# Columns of the Hugging Face files: one common set for every config (null where not applicable).
+# Local files keep the rest, which the P6 attack and the P7 checks need.
+HF_COLUMNS: tuple[str, ...] = (
+    "sample_id",
+    "parent_id",
+    "scenario",
+    "query",
+    "document",
+    "label",
+    "attack_group",
+    "attack_name",
+    "position",
+    "injection_span",
+    "generation_method",
+    "attack_category",
+    "injection_vector",
+)
+assert set(HF_COLUMNS) <= set(COLUMNS)

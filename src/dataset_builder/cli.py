@@ -53,7 +53,7 @@ def check_config(ctx: typer.Context) -> None:
     for name, path in cfg.paths.model_dump().items():
         path.mkdir(parents=True, exist_ok=True)
         typer.echo(f"{name + ':':<11} {path}")
-    typer.echo(f"\ninstruct:\n  {cfg.texts.instruct}")
+    typer.echo(f"\ninstruct (prompt text, not a column):\n  {cfg.texts.instruct}")
     typer.echo(f"query_template:\n  {cfg.texts.query_template}")
 
 
@@ -234,7 +234,7 @@ def p6_agreement(
 @app.command("p7-checks")
 def p7_checks(
     ctx: typer.Context,
-    version: Annotated[str, typer.Option(help="v0, v1 or v2 (v0 and v1 run now).")] = "v0",
+    version: Annotated[str, typer.Option(help="v0, v1, v2 or v3 (v0 to v2 run now).")] = "v1",
 ) -> None:
     """P7: data checks, shortcut baselines and diagnostics for one version (reads data/out only).
     Exit 0 = PUSH ALLOWED, 1 = a data check failed, 2 = only a baseline limit is exceeded."""
@@ -261,8 +261,11 @@ def p10_push(
         bool, typer.Option("--push", help="Upload to Hugging Face. Without it: dry-run only.")
     ] = False,
     version: Annotated[
-        str, typer.Option("--version", help="v0 (bipia + nemotron) or v1 (+ bipia_textfooler).")
-    ] = "v0",
+        str,
+        typer.Option(
+            "--version", help="v0, v1 (bipia + nemotron, lean columns) or v2 (+ textfooler)."
+        ),
+    ] = "v1",
     card_only: Annotated[
         bool,
         typer.Option(
@@ -312,17 +315,19 @@ def p10_push(
 @app.command("p10-verify")
 def p10_verify(
     ctx: typer.Context,
-    version: Annotated[str, typer.Option("--version", help="Tag to load: v0 or v1.")] = "v0",
+    version: Annotated[str, typer.Option("--version", help="Tag to load: v0, v1 or v2.")] = "v1",
 ) -> None:
     """P10: load every config and split at the version's tag in a clean environment and check
-    the counts against the reports (v1: also check that v0 is unchanged)."""
+    the counts against the reports (from v1: the previous tag still loads, and the files not
+    re-uploaded are unchanged)."""
     from dataset_builder.steps import p10_push as p10
 
     out = p10.run_verify(ctx.obj.cfg, version=version)
     for name, st in out["loaded"].items():
         typer.echo(f"{name + ':':<26} {st['rows']:>7,} rows loaded")
-    if out["v0_unchanged"]:
-        typer.echo(f"v0 unchanged: {len(out['v0_unchanged']['files_compared'])} files identical")
+    prev = out["previous_unchanged"]
+    if prev:
+        typer.echo(f"{prev['tag']} still loads; {len(prev['files_compared'])} files identical")
     typer.echo(f"private: {out['private']}  |  secrets in remote files: none")
     typer.echo(f"PASSED. report: {out['report']}")
 

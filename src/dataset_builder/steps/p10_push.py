@@ -1,8 +1,10 @@
 """P10: push a version of the dataset to the private Hugging Face repo.
 
-Versions (the brief's scheme): v0 = `bipia` + `nemotron`; v1 = v0 + `bipia_textfooler` (test).
-A version is pushed once and tagged with its own name. v1 only ADDS `bipia_textfooler` and
-updates the card: no v0 file is uploaded again, and `verify` checks that v0 is unchanged.
+Versions: v0 = `bipia` + `nemotron` (old columns, `query` wrapped in a template, `instruct`);
+v1 = the same data re-uploaded with `query` = the user request only and the lean Hugging Face
+columns (`HF_COLUMNS`); v2 = v1 + `bipia_textfooler` (test). A version is pushed once and tagged
+with its own name; earlier tags are never moved. v2 only ADDS `bipia_textfooler`, and `verify`
+checks that the v1 files are unchanged.
 
 Dry-run by default: preflight checks, staging (parquet files + dataset card), secret scan, the P7
 gate and a report, with no network call. `push` needs the P7 report of the version to say PUSH
@@ -26,10 +28,10 @@ import yaml
 
 from dataset_builder.config import REPO_ROOT, Config, load_config, require_secret
 from dataset_builder.reports import CountMismatchError, report_path
-from dataset_builder.schema import COLUMNS, columns_for
+from dataset_builder.schema import COLUMNS, HF_COLUMNS, columns_for
 
 REPORT_NAME = "p10_push"
-# Splits pushed per config. v1 has only the TextFooler test split (v2 will add train/validation).
+# Splits pushed per config. v2 has only the TextFooler test split (v3 will add train/validation).
 SPLITS: dict[str, tuple[str, ...]] = {
     "bipia": ("train", "validation", "test"),
     "nemotron": ("test",),
@@ -37,9 +39,14 @@ SPLITS: dict[str, tuple[str, ...]] = {
 }
 VERSIONS: dict[str, tuple[str, ...]] = {
     "v0": ("bipia", "nemotron"),
-    "v1": ("bipia", "nemotron", "bipia_textfooler"),
+    "v1": ("bipia", "nemotron"),
+    "v2": ("bipia", "nemotron", "bipia_textfooler"),
 }
-# Reports whose `failures` must be empty before anything is pushed (+ P6 for v1).
+# The tag a version builds on (it must exist before the push).
+PREVIOUS: dict[str, str] = {"v1": "v0", "v2": "v1"}
+# Columns of the files pushed as v0 (before `instruct` was dropped and the query unwrapped).
+V0_COLUMNS: tuple[str, ...] = (*COLUMNS[:6], "instruct", *COLUMNS[6:])
+# Reports whose `failures` must be empty before anything is pushed (+ P6 from v2).
 STEP_REPORTS = (
     "p1/p1_counts.json",
     "p2/p2_counts.json",
@@ -78,16 +85,23 @@ def configs_of(version: str) -> list[str]:
 
 
 def new_configs(version: str) -> list[str]:
-    """Configs this version adds to the repo (the others are already there, untouched)."""
-    if version == "v0":
-        return configs_of("v0")
-    return [c for c in configs_of(version) if c not in VERSIONS["v0"]]
+    """Configs this version uploads (the others are already there, untouched). v1 re-uploads
+    v0's configs with the new query and columns; v2 adds only `bipia_textfooler`."""
+    if version in ("v0", "v1"):
+        return configs_of(version)
+    return [c for c in configs_of(version) if c not in VERSIONS[PREVIOUS[version]]]
+
+
+def hub_columns(version: str) -> tuple[str, ...]:
+    """Columns of every file on the Hub at this version's tag."""
+    return V0_COLUMNS if version == "v0" else HF_COLUMNS
 
 
 def load_reports(cfg: Config, version: str = "v0") -> dict[str, dict[str, Any]]:
-    """The step reports' JSON, keyed by step (p1 ... p5, p6 for v1, p3hn and p7 when present)."""
+    """The step reports' JSON, keyed by step (p1 ... p5, p6 from v2, p3hn and p7 when present)."""
     out: dict[str, dict[str, Any]] = {}
-    needed = list(STEP_REPORTS) + (["p6/p6_textfooler.json"] if version == "v1" else [])
+    tf = "bipia_textfooler" in configs_of(version)
+    needed = list(STEP_REPORTS) + (["p6/p6_textfooler.json"] if tf else [])
     for rel in needed:
         path = cfg.paths.reports / rel
         if not path.is_file():
@@ -294,7 +308,7 @@ def _textfooler_sources(reports: dict[str, dict[str, Any]]) -> list[list[str]]:
 
 def _textfooler_licences(reports: dict[str, dict[str, Any]], included: bool) -> list[str]:
     if not included:
-        return ["- **TextAttack** (MIT) is used for the TextFooler config (added in v1)."]
+        return ["- **TextAttack** (MIT) is used for the TextFooler config (added in v2)."]
     info = (reports.get("p6") or {}).get("info", {})
     victim = info.get("victim", "").partition("@")[0]
     return [
@@ -431,7 +445,7 @@ def build_card(
         + (
             " Not yet included: "
             + ", ".join(f"`{c}`" for c in missing)
-            + " (TextFooler variants, added in v1)."
+            + " (TextFooler variants, added in v2)."
             if missing
             else ""
         ),
@@ -583,57 +597,30 @@ def build_card(
         out += _textfooler_section(cfg, reports)
 
     # Columns
+    cols = hub_columns(version)
     out += [
         "## Columns",
         "",
-        f"Every config has the same {len(COLUMNS)} columns, in the same order"
-        + (
-            "; `bipia_textfooler` adds one, `p_yes_base`, at the end"
-            if "bipia_textfooler" in configs
-            else ""
-        )
-        + ". A model sees "
-        "`instruct`, `query` and `document`, and predicts `answer` (`yes` = contains an "
-        "injection) or `label` (1 / 0).",
+        f"Every config has the same {len(cols)} columns, in the same order. A model sees "
+        "`query` (the user's request, exactly as asked) and `document`, and predicts `label` "
+        "(1 = contains an injection, 0 = clean). No policy or prompt text is stored in the "
+        "data: the prompt is up to the model being trained or tested.",
         "",
         _table(
             ["column", "meaning"],
             [
                 [
                     "`sample_id`, `parent_id`",
-                    "unique id; on a negative, the id of its attacked twin",
+                    "unique id; the id shared by an attacked sample and its benign twin",
                 ],
-                ["`source`, `split`, `source_split`", "config, split here, split in the source"],
                 ["`scenario`", "BIPIA: email / table / code; Nemotron: the domain"],
-                ["`instruct`, `query`", "the fixed policy text; the user's request"],
+                ["`query`", "the user's request (email/table: the question; code: fix the bug)"],
                 ["`document`", "the tool output, with the attack or the benign text inside"],
-                ["`label`, `answer`", "1 / `yes` = contains an injection; 0 / `no` = clean"],
+                ["`label`", "1 = contains an injection; 0 = clean"],
                 ["`attack_group`, `attack_name`, `injection_span`", "the attack (positives)"],
-                ["`position`, `insert_index`", "BIPIA: where the text was inserted"],
-                [
-                    "`benign_id`, `benign_span`",
-                    "BIPIA negatives: the benign text and its [start, end) in `document`",
-                ],
-                ["`protected_tokens`, `victim_model`", "TextFooler variants only"],
-                *(
-                    [
-                        [
-                            "`p_yes_base`",
-                            "`bipia_textfooler` only: base Shieldstral's p(yes) on the row",
-                        ]
-                    ]
-                    if "bipia_textfooler" in configs
-                    else []
-                ),
-                [
-                    "Nemotron metadata",
-                    "`document_path`, `injection_vector`, `attack_category`, "
-                    "`goal_group`, `wrapper`, `wrapper_outside_span`, `sentence_repaired`",
-                ],
-                [
-                    "`label_provenance`, `generation_method`, `label_checked`",
-                    "how the row and its label were made",
-                ],
+                ["`position`", "BIPIA: where the text was inserted (start / middle / end)"],
+                ["`generation_method`", "how the row was made"],
+                ["`attack_category`, `injection_vector`", "Nemotron: the attack's metadata"],
             ],
         ),
         "",
@@ -681,7 +668,7 @@ def stage(
     cfg: Config, version: str, card: str, out_dir: Path, card_only: bool = False
 ) -> list[Path]:
     """Copy the parquet files this version adds, and write README.md, into a fresh staging
-    folder. v1 stages only `bipia_textfooler` (+ the card): v0 files are never uploaded again."""
+    folder. v2 stages only `bipia_textfooler` (+ the card). Each file keeps only the Hub columns."""
     if out_dir.exists():
         shutil.rmtree(out_dir)
     files: list[Path] = []
@@ -689,7 +676,8 @@ def stage(
         for split in SPLITS[config]:
             dst = out_dir / config / f"{split}.parquet"
             dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(parquet_path(cfg, config, split), dst)
+            table = pq.read_table(parquet_path(cfg, config, split))
+            pq.write_table(table.select(list(hub_columns(version))), dst)
             files.append(dst)
     out_dir.mkdir(parents=True, exist_ok=True)
     readme = out_dir / "README.md"
@@ -769,13 +757,16 @@ def push(cfg: Config, out_dir: Path, version: str, api: Any = None) -> dict[str,
     tags = {t.name for t in getattr(api.list_repo_refs(repo, repo_type="dataset"), "tags", [])}
     if version in tags:
         raise RuntimeError(f"tag {version!r} already exists on {repo}: a version is pushed once.")
-    if version != "v0" and "v0" not in tags:
-        raise RuntimeError(f"{version} adds to v0, but tag 'v0' does not exist on {repo}.")
+    prev = PREVIOUS.get(version)
+    if prev and prev not in tags:
+        raise RuntimeError(
+            f"{version} builds on {prev}, but tag {prev!r} does not exist on {repo}."
+        )
     commit = api.upload_folder(
         repo_id=repo,
         repo_type="dataset",
         folder_path=str(out_dir),
-        commit_message=f"{version}: add " + ", ".join(new_configs(version)),
+        commit_message=f"{version}: upload " + ", ".join(new_configs(version)),
     )
     oid = getattr(commit, "oid", None)
     api.create_tag(repo, repo_type="dataset", tag=version, revision=oid, tag_message=version)
@@ -810,7 +801,8 @@ def compare_files(dir_a: Path, dir_b: Path, rel_paths: list[str]) -> list[str]:
 
 def verify(cfg: Config, version: str) -> dict[str, Any]:
     """Load every config/split at the version's tag from the Hub in a clean uv environment and
-    compare with the reports. From v1 on, also load v0 again and check that it is unchanged."""
+    compare with the reports. From v1 on, also load the previous tag again: it must still load,
+    and the files this version did not upload must be unchanged."""
     token = require_secret("HF_TOKEN")
     reports = load_reports(cfg, version)
     env = {**os.environ, "HF_TOKEN": token, "HF_HUB_DISABLE_PROGRESS_BARS": "1"}
@@ -853,7 +845,9 @@ def _load_at(cfg: Config, rev: str, configs: list[str], token: str, env: dict, w
     return json.loads(line.removeprefix("P10_VERIFY "))
 
 
-def _count_errors(loaded: dict, configs: list[str], reports: dict, rev: str) -> list[str]:
+def _count_errors(
+    loaded: dict, configs: list[str], reports: dict, rev: str, columns: tuple[str, ...]
+) -> list[str]:
     errors = []
     for c in configs:
         exp = expected_rows(reports, c)
@@ -863,7 +857,7 @@ def _count_errors(loaded: dict, configs: list[str], reports: dict, rev: str) -> 
                 errors.append(
                     f"{rev} {c}/{s}: loaded {got.get('rows')} rows, reports say {exp.get(s)}"
                 )
-            if tuple(got.get("columns", ())) != columns_for(c):
+            if tuple(got.get("columns", ())) != columns:
                 errors.append(f"{rev} {c}/{s}: loaded columns differ from the schema")
     return errors
 
@@ -880,7 +874,7 @@ def _verify_in(
 
     configs = configs_of(version)
     loaded = _load_at(cfg, version, configs, token, env, work)
-    errors = _count_errors(loaded, configs, reports, version)
+    errors = _count_errors(loaded, configs, reports, version, hub_columns(version))
 
     # Secret check on the remote files (README and parquet) at the tag.
     api = HfApi(token=token)
@@ -897,26 +891,31 @@ def _verify_in(
     if not info.private:
         errors.append("the repository is not private")
 
-    v0_unchanged = None
-    if version != "v0":
-        v0_configs = configs_of("v0")
-        loaded_v0 = _load_at(cfg, "v0", v0_configs, token, env, work)
-        errors += _count_errors(loaded_v0, v0_configs, load_reports(cfg, "v0"), "v0")
-        local0 = Path(
+    previous = None
+    prev = PREVIOUS.get(version)
+    if prev:
+        p_configs = configs_of(prev)
+        loaded_p = _load_at(cfg, prev, p_configs, token, env, work)
+        # v1 keeps v0's rows, so v0 is checked against the same reports, with its own columns
+        errors += _count_errors(
+            loaded_p, p_configs, load_reports(cfg, prev), prev, hub_columns(prev)
+        )
+        local_p = Path(
             api.snapshot_download(
-                cfg.dataset.repo_id, repo_type="dataset", revision="v0", local_dir=str(work / "f0")
+                cfg.dataset.repo_id, repo_type="dataset", revision=prev, local_dir=str(work / "fp")
             )
         )
-        rels = [f"{c}/{s}.parquet" for c in v0_configs for s in SPLITS[c]]
-        diff = compare_files(local0, local, rels)
-        errors += [f"v0 file changed in {version}: {d}" for d in diff]
-        v0_unchanged = {"loaded": loaded_v0, "files_compared": rels, "differences": diff}
+        kept = [c for c in p_configs if c not in new_configs(version)]
+        rels = [f"{c}/{s}.parquet" for c in kept for s in SPLITS[c]]
+        diff = compare_files(local_p, local, rels)
+        errors += [f"{prev} file changed in {version}: {d}" for d in diff]
+        previous = {"tag": prev, "loaded": loaded_p, "files_compared": rels, "differences": diff}
     return {
         "tag": version,
         "loaded": loaded,
         "remote_files": sorted(str(p.relative_to(local)).replace("\\", "/") for p in remote_files),
         "private": bool(info.private),
-        "v0_unchanged": v0_unchanged,
+        "previous_unchanged": previous,
         "errors": errors,
     }
 
@@ -964,9 +963,9 @@ def _report(cfg: Config, version: str, payload: dict[str, Any]) -> Path:
         "",
         "## Preflight",
         "",
-        f"Step reports have no failed checks; every file has the {len(COLUMNS)} schema columns "
-        "in order, the reported row count, classes 1:1, one split and source value, and unique "
-        "`sample_id`s.",
+        f"Step reports have no failed checks; every local file has the {len(COLUMNS)} schema "
+        "columns in order, the reported row count, classes 1:1, one split and source value, and "
+        f"unique `sample_id`s. The staged files keep the {len(hub_columns(version))} Hub columns.",
         "",
         _table(
             ["file", "rows", "label 1", "label 0", "MB"],
@@ -1036,12 +1035,13 @@ def _report(cfg: Config, version: str, payload: dict[str, Any]) -> Path:
             "- Secret scan of the remote files: "
             + ("none found" if not any("secret" in e for e in v.get("errors", [])) else "FOUND"),
         ]
-        u = v.get("v0_unchanged")
+        u = v.get("previous_unchanged")
         if u:
+            t = u["tag"]
             lines += [
-                "- v0 loaded again at revision `v0`: "
+                f"- {t} loaded again at revision `{t}`: "
                 + ", ".join(f"{k} {x['rows']:,}" for k, x in u["loaded"].items()),
-                f"- v0 files compared between `v0` and `{version}` (sha256): "
+                f"- {t} files not re-uploaded, compared between `{t}` and `{version}` (sha256): "
                 f"{len(u['files_compared'])} files, "
                 + ("**unchanged**" if not u["differences"] else f"**DIFFER**: {u['differences']}"),
             ]
@@ -1060,6 +1060,9 @@ def _report(cfg: Config, version: str, payload: dict[str, Any]) -> Path:
         "- **Earlier push:** an early `v0.1` (29 columns, original pool) was pushed before the "
         "version scheme existed; its record is in `reports/archive/p10/v0.1/`. `v0` replaces "
         "it in `main`; the `v0.1` tag keeps it reachable.",
+        "- **v1:** the v0 data re-uploaded with `query` = the user's request only (the template "
+        "wrapper removed by a regex, documents unchanged), no `instruct` column, and only the "
+        "Hub columns. TextFooler moved to v2 and P8 to v3. The `v0` tag is unchanged.",
         "",
     ]
     path = report_path(cfg, f"{name}.md")
@@ -1073,13 +1076,18 @@ def _report(cfg: Config, version: str, payload: dict[str, Any]) -> Path:
 def run(
     cfg: Config | None = None,
     *,
-    version: str = "v0",
+    version: str = "v1",
     do_push: bool = False,
     card_only: bool = False,
     api: Any = None,
 ) -> dict[str, Any]:
     cfg = cfg or load_config()
     configs = configs_of(version)
+    if version == "v0":
+        raise RuntimeError(
+            "v0 is already on the Hub with the old columns, and the local files are now in the "
+            "v1 format (no `instruct`, query = the user request): stage or push v1 instead."
+        )
     reports = load_reports(cfg, version)
     stats = preflight(cfg, configs, reports)  # all configs of the version, v0 files included
     reports["rows_per_doc"] = rows_per_doc(cfg)
@@ -1117,7 +1125,7 @@ def run(
     return {**payload, "report": report, "card": out_dir / "README.md"}
 
 
-def run_verify(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
+def run_verify(cfg: Config | None = None, version: str = "v1") -> dict[str, Any]:
     cfg = cfg or load_config()
     result = verify(cfg, version)
     report = _report(cfg, version, {"action": "verify", "verify": result})

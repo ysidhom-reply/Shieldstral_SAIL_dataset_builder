@@ -1,4 +1,4 @@
-"""P6: TextFooler test variants against base Shieldstral, and benign twins (dataset version v1).
+"""P6: TextFooler test variants against base Shieldstral, and benign twins (dataset version v2).
 
 What this step does, per run:
 1. pairs (a positive and its benign twin) are sampled before any attack: stratified by scenario,
@@ -36,7 +36,7 @@ from typing import Any
 from dataset_builder.config import Config, TextFoolerCfg, load_config
 from dataset_builder.io import prepare_out, read_jsonl, read_parquet, write_jsonl, write_parquet
 from dataset_builder.reports import CountMismatchError
-from dataset_builder.schema import TextFoolerSample
+from dataset_builder.schema import TextFoolerSample, instruct_text
 from dataset_builder.steps import p6_report
 from dataset_builder.steps.p6_attack import Engine, TextFoolerEngine
 from dataset_builder.steps.p6_judge import Judge, build_judge
@@ -118,7 +118,7 @@ def victim_phase(
         )
     # every original is scored: a twin's score is also its plain control's score
     p0 = engine.score(
-        [(it["row"]["instruct"], it["row"]["query"], it["row"]["document"]) for it in items]
+        [(instruct_text(), it["row"]["query"], it["row"]["document"]) for it in items]
     )
     thr = tf.threshold
     for it, rec, (span, tokens), p_orig in zip(items, recs, spans, p0, strict=True):
@@ -133,7 +133,7 @@ def victim_phase(
         feedback = rec["kind"] == "malicious" or p_orig < thr
         row = it["row"]
         t1 = time.monotonic()
-        out = engine.attack(span, rec["label"], tokens, row["instruct"], row["query"], feedback)
+        out = engine.attack(span, rec["label"], tokens, instruct_text(), row["query"], feedback)
         rec["seconds"] += time.monotonic() - t1
         rec |= {
             "queries": out["queries"],
@@ -425,7 +425,9 @@ def assemble(
     if missing:  # a twin never attempted: score it now (reloads the victim once)
         for n, p in zip(
             missing,
-            runner.engine.score([(n["instruct"], n["query"], n["document"]) for n in missing]),
+            runner.engine.score(
+                [(instruct_text(runner.cfg), n["query"], n["document"]) for n in missing]
+            ),
             strict=True,
         ):
             saved[n["sample_id"]] = p

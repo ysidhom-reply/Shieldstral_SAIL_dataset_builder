@@ -90,7 +90,7 @@ def test_run_end_to_end(p4cfg):
         for pair in by_pair.values():
             pos, neg = sorted(pair, key=lambda r: -r["label"])
             assert (pos["label"], neg["label"]) == (1, 0)
-            for k in ("query", "instruct", "position", "insert_index", "scenario", "split"):
+            for k in ("query", "position", "insert_index", "scenario", "split"):
                 assert pos[k] == neg[k], k
             assert neg["generation_method"] == "llm_benign_insertion" and neg["answer"] == "no"
             assert neg["benign_id"] and neg["attack_name"] is None

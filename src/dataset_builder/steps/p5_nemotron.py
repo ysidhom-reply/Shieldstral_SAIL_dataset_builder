@@ -31,7 +31,7 @@ from dataset_builder.reports import (
     report_path,
     write_counts_report,
 )
-from dataset_builder.schema import Sample, build_query, instruct_text
+from dataset_builder.schema import Sample, build_query
 
 logger = logging.getLogger(__name__)
 
@@ -354,7 +354,6 @@ def build_pair(rec: dict[str, Any], repairs: dict[int, dict[str, str]], cfg: Con
         "split": "test",
         "source_split": HF_SPLIT,
         "scenario": rec["domain"],
-        "instruct": instruct_text(cfg),
         "query": build_query(rec["user_request"], cfg),
         "document_path": _dotted(loc.path),
         "injection_vector": rec["injection_vector"],

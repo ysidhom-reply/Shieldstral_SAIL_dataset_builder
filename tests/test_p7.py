@@ -10,7 +10,7 @@ import pytest
 from dataset_builder.insert import insert
 from dataset_builder.io import write_parquet
 from dataset_builder.query import query as doc_query
-from dataset_builder.schema import Sample, instruct_text
+from dataset_builder.schema import Sample
 from dataset_builder.steps import p7_checks as p7
 
 POSITIONS = ("start", "middle", "end")
@@ -43,7 +43,6 @@ def _pair(cfg, d, position, attack, name):
         split=d["split"],
         source_split=d["split"],
         scenario=d["scenario"],
-        instruct=instruct_text(cfg),
         query=doc_query(d, cfg),
         position=position,
     )
@@ -90,7 +89,6 @@ def _nemotron(cfg, i):
         split="test",
         source_split="train",
         scenario="hr",
-        instruct=instruct_text(cfg),
         query="q",
     )
     pos = Sample(
@@ -373,6 +371,6 @@ def test_run_exit_code_1_on_a_data_failure(files):
     assert p7.run(files)["exit_code"] == p7.EXIT_DATA
 
 
-def test_v2_is_not_built_yet(files):
+def test_v3_is_not_built_yet(files):
     with pytest.raises(p7.P7NotReadyError):
-        p7.run(files, version="v2")
+        p7.run(files, version="v3")

@@ -66,7 +66,7 @@ reports/
   working_report.{md,pdf,html}
 src/dataset_builder/
   config.py             load_config(), require_secret()
-  schema.py             Sample model, COLUMNS (the shared contract), instruct_text()
+  schema.py             Sample model, COLUMNS (local files), HF_COLUMNS (Hub files), instruct_text()
   io.py                 prepare_out() (--force guard), jsonl/parquet I/O, rng(step), pilot()
   reports.py            write_counts_report(), check_expected(), report_path()
   insert.py             insert() / remove(): the one insertion rule (P2, P4, P7)
@@ -105,8 +105,8 @@ uv run dataset-builder [--pilot | --full] [--force] [--config PATH] <command>
 | P4 BIPIA negatives + `bipia` config | `p4-bipia-assemble` (`--force` to overwrite) | `data/out/bipia/{train,validation,test}.parquet` (with `benign_span`), `data/interim/p4_pairs.jsonl`, `reports/p4/p4_composition.md` |
 | P5 Nemotron test set | `--full p5-nemotron` | `data/out/nemotron/test.parquet`, `reports/p5/p5_nemotron.md` |
 | P6 TextFooler test variants (P6 environment) | `p6-textfooler` (pilot, 20 samples), then `--full p6-textfooler` | `data/out/bipia_textfooler/test.parquet`, `data/interim/p6_results.jsonl` (resumable), `reports/p6/p6_textfooler.md` |
-| P7 checks and shortcut baselines | `p7-checks --version v0` (v1, v2 later) | `reports/p7/p7_checks_<version>.{md,json}`; exit 0 = PUSH ALLOWED, 1 = a data check failed, 2 = a baseline limit exceeded |
-| P10 push to Hugging Face (versions v0, v1) | `p10-push --version v0` (dry-run), then `p10-push --push --version v0`, then `p10-verify --version v0`; v1 the same with `--version v1` | `data/interim/p10_stage/` (files this version adds + card), `reports/p10/p10_push_<version>.md`, `reports/p10/p10_dataset_card_<version>.md` |
+| P7 checks and shortcut baselines | `p7-checks --version v1` (v2 with P6, v3 later) | `reports/p7/p7_checks_<version>.{md,json}`; exit 0 = PUSH ALLOWED, 1 = a data check failed, 2 = a baseline limit exceeded |
+| P10 push to Hugging Face (versions v0, v1, v2) | `p10-push --version v1` (dry-run), then `p10-push --push --version v1`, then `p10-verify --version v1`; v2 the same with `--version v2` | `data/interim/p10_stage/` (files this version adds + card), `reports/p10/p10_push_<version>.md`, `reports/p10/p10_dataset_card_<version>.md` |
 
 Every command is run as `uv run dataset-builder <command>` (P6: in the P6 environment, see above).
 
@@ -131,9 +131,11 @@ nothing to `data/out`.
   to say **PUSH ALLOWED**. `p10-push` is a dry-run unless `--push` is given; it stops if a step
   report has a failed check, a count differs, a column is not in the schema, or a staged file
   contains something that looks like a secret. It refuses a public repo or an existing tag.
-- **Versions:** `v0` = `bipia` + `nemotron`; `v1` = v0 + `bipia_textfooler` (test). A version is
-  pushed once and tagged with its name. `v1` only adds `bipia_textfooler` and updates the card:
-  no v0 file is uploaded again, and `p10-verify --version v1` checks that v0 is unchanged. The
+- **Versions:** `v0` = `bipia` + `nemotron` (query wrapped in a template, `instruct` column);
+  `v1` = the same rows with `query` = the user's request only, no `instruct`, and only the Hub
+  columns (`HF_COLUMNS` in `schema.py`); `v2` = v1 + `bipia_textfooler` (test); `v3` adds P8. A
+  version is pushed once and tagged with its name; no tag is moved. `v2` only adds
+  `bipia_textfooler`, and `p10-verify --version v2` checks that the v1 files are unchanged. The
   early `v0.1` push (before this scheme) is recorded in `reports/archive/p10/v0.1/`.
 - The P7 gate is enforced in code: `p10-push --push` stops unless `p7_checks_<version>.json`
   says PUSH ALLOWED and is newer than the data it checked. A dry-run always runs and shows the

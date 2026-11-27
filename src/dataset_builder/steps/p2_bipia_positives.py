@@ -27,7 +27,7 @@ from dataset_builder.reports import (
     report_path,
     write_counts_report,
 )
-from dataset_builder.schema import COLUMNS, Sample, instruct_text
+from dataset_builder.schema import COLUMNS, Sample
 from dataset_builder.steps.p1_bipia_split import ATTACKS_FILE, DOCS_FILE
 
 logger = logging.getLogger(__name__)
@@ -118,7 +118,7 @@ def code_blocks(text: str) -> list[str]:
 
 
 def make_sample(
-    doc: dict[str, Any], attack: dict[str, Any], position: str, q: str, instruct: str
+    doc: dict[str, Any], attack: dict[str, Any], position: str, q: str
 ) -> dict[str, Any]:
     new_text, idx = insert(doc["document"], attack["text"], position, doc["middle_index"])
     h = hashlib.sha1(f"{doc['doc_id']}|{attack['attack_id']}|{position}".encode()).hexdigest()[:16]
@@ -129,7 +129,6 @@ def make_sample(
         split=doc["split"],
         source_split=doc["source_split"],
         scenario=doc["scenario"],
-        instruct=instruct,
         query=q,
         document=new_text,
         label=1,
@@ -149,7 +148,6 @@ def make_sample(
 def build_positives(
     docs: list[dict[str, Any]], attacks: list[dict[str, Any]], n_per_doc: int, cfg: Config
 ) -> list[dict[str, Any]]:
-    instruct = instruct_text(cfg)
     rows: list[dict[str, Any]] = []
     for split in SPLITS:
         for scenario in cfg.bipia.scenarios:
@@ -163,7 +161,7 @@ def build_positives(
                 else sampled_combos(ds, pool, n_per_doc, split, scenario, cfg)
             )
             rows += [
-                make_sample(d, a, p, query(d, cfg, choose_question(d, a, p, cfg)), instruct)
+                make_sample(d, a, p, query(d, cfg, choose_question(d, a, p, cfg)))
                 for d, a, p in combos
             ]
     return rows
@@ -432,7 +430,7 @@ def _sections(
                 ["scenario", "user request (from doc)"],
                 [[s, _esc(user_request(example_docs[s]))] for s in ("email", "table", "code")],
             )
-            + "\n\nThe query is the fixed template around the user request, and it is stored in "
+            + "\n\nThe query is the user request alone (no wrapper), and it is stored in "
             "each sample (P4 reuses it exactly for the negative). Email/table: a question without "
             "its `Q:` prefix. Code: `Fix the bug in my code. Error: <last line of the traceback>`.",
         ),

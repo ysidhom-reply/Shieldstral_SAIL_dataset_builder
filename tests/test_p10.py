@@ -9,7 +9,7 @@ import pyarrow.parquet as pq
 import pytest
 
 from dataset_builder.reports import CountMismatchError
-from dataset_builder.schema import columns_for
+from dataset_builder.schema import HF_COLUMNS, columns_for
 from dataset_builder.steps import p10_push as p10
 
 SIZES = {("bipia", "train"): 8, ("bipia", "validation"): 4, ("bipia", "test"): 6}
@@ -111,7 +111,7 @@ def _write_p6(cfg):
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
-def _write_p7(cfg, version="v0", status="PUSH ALLOWED", exit_code=0, newer=True):
+def _write_p7(cfg, version="v1", status="PUSH ALLOWED", exit_code=0, newer=True):
     ok = {"auc": 0.6, "recall": 0.1, "n": 6}
     payload = {
         "status": status,
@@ -144,9 +144,9 @@ def ready(cfg, monkeypatch):
 
 
 @pytest.fixture
-def ready_v1(ready):
+def ready_v2(ready):
     _write_p6(ready)
-    _write_p7(ready, "v1")
+    _write_p7(ready, "v2")
     return ready
 
 
@@ -157,7 +157,7 @@ def test_dry_run_builds_card_and_never_calls_the_hub(ready, monkeypatch):
         raise AssertionError("the dry-run must not create an HfApi")
 
     monkeypatch.setattr(huggingface_hub, "HfApi", boom)
-    out = p10.run(ready, version="v0")
+    out = p10.run(ready, version="v1")
 
     assert out["action"] == "dry-run" and "push" not in out
     card = out["card"].read_text(encoding="utf-8")
@@ -179,6 +179,9 @@ def test_dry_run_builds_card_and_never_calls_the_hub(ready, monkeypatch):
         "bipia/validation.parquet",
         "nemotron/test.parquet",
     ]
+    for f in staged[1:]:  # the Hub files keep only the lean columns, in order
+        assert tuple(pq.read_schema(out["card"].parent / f).names) == HF_COLUMNS
+    assert "instruct" not in card.split("## Columns")[1].split("## Licences")[0]
     assert out["report"].is_file()
 
 
@@ -246,18 +249,30 @@ class FakeApi:
 
 
 def test_push_uploads_and_tags(ready):
-    api = FakeApi()
-    out = p10.run(ready, version="v0", do_push=True, api=api)
+    with pytest.raises(RuntimeError, match="tag 'v0' does not exist"):
+        p10.run(ready, version="v1", do_push=True, api=FakeApi())
+    api = FakeApi(tags=["v0"])
+    out = p10.run(ready, version="v1", do_push=True, api=api)
     assert out["push"] == {
         "commit": "c0ffee",
         "commit_url": "https://example/commit",
-        "tag": "v0",
+        "tag": "v1",
     }
     (kind, up), (kind2, tag) = api.calls
     assert (
         kind == "upload" and up["repo_type"] == "dataset" and up["repo_id"] == ready.dataset.repo_id
     )
-    assert kind2 == "tag" and tag["tag"] == "v0" and tag["revision"] == "c0ffee"
+    assert kind2 == "tag" and tag["tag"] == "v1" and tag["revision"] == "c0ffee"
+    uploaded = sorted(
+        p.relative_to(up["folder_path"]).as_posix()
+        for p in Path(up["folder_path"]).rglob("*.parquet")
+    )
+    assert uploaded == [  # v1 re-uploads v0's configs with the new columns
+        "bipia/test.parquet",
+        "bipia/train.parquet",
+        "bipia/validation.parquet",
+        "nemotron/test.parquet",
+    ]
 
 
 def test_push_refuses_public_repo(ready):
@@ -268,9 +283,9 @@ def test_push_refuses_public_repo(ready):
 
 
 def test_push_refuses_existing_tag(ready):
-    api = FakeApi(tags=["v0"])
+    api = FakeApi(tags=["v0", "v1"])
     with pytest.raises(RuntimeError, match="already exists"):
-        p10.run(ready, version="v0", do_push=True, api=api)
+        p10.run(ready, version="v1", do_push=True, api=api)
     assert api.calls == []
 
 
@@ -278,7 +293,7 @@ def test_push_refuses_existing_tag(ready):
 
 
 def test_gate_open_when_p7_allows_and_is_newer_than_the_data(ready):
-    gate = p10.p7_gate(ready, "v0", ["bipia", "nemotron"])
+    gate = p10.p7_gate(ready, "v1", ["bipia", "nemotron"])
     assert gate["ok"] and gate["status"] == "PUSH ALLOWED"
 
 
@@ -291,12 +306,12 @@ def test_gate_open_when_p7_allows_and_is_newer_than_the_data(ready):
 )
 def test_gate_closed_when_p7_blocks_or_is_stale(ready, kwargs, reason):
     _write_p7(ready, **kwargs)
-    gate = p10.p7_gate(ready, "v0", ["bipia", "nemotron"])
+    gate = p10.p7_gate(ready, "v1", ["bipia", "nemotron"])
     assert not gate["ok"] and reason in gate["reason"]
 
 
 def test_gate_closed_when_p7_is_missing(cfg):
-    assert "not found" in p10.p7_gate(cfg, "v1", ["bipia"])["reason"]
+    assert "not found" in p10.p7_gate(cfg, "v2", ["bipia"])["reason"]
 
 
 def test_push_is_blocked_by_the_gate_but_a_dry_run_still_works(ready):
@@ -309,17 +324,17 @@ def test_push_is_blocked_by_the_gate_but_a_dry_run_still_works(ready):
     assert api.calls == []
 
 
-# ------------------------------------------------------------------ v1
+# ------------------------------------------------------------------ v2
 
 
-def test_v1_stages_only_the_new_config_and_a_card_with_the_textfooler_section(ready_v1):
-    out = p10.run(ready_v1, version="v1")
+def test_v2_stages_only_the_new_config_and_a_card_with_the_textfooler_section(ready_v2):
+    out = p10.run(ready_v2, version="v2")
     staged = sorted(
         p.relative_to(out["stage_dir"]).as_posix()
         for p in out["card"].parent.rglob("*")
         if p.is_file()
     )
-    assert staged == ["README.md", "bipia_textfooler/test.parquet"]  # v0 files not uploaded again
+    assert staged == ["README.md", "bipia_textfooler/test.parquet"]  # v1 files not uploaded again
     assert out["uploads"] == ["bipia_textfooler"] and out["gate"]["ok"]
     card = out["card"].read_text(encoding="utf-8")
     assert "config_name: bipia_textfooler" in card and "config_name: bipia" in card
@@ -330,31 +345,31 @@ def test_v1_stages_only_the_new_config_and_a_card_with_the_textfooler_section(re
     assert "Only variants that fooled the victim are kept" in card
     assert "0.84" in card and "no windows" in card  # constraint values and the prompt rule
     assert "| email | attacked (1) | 30 | 4 | 12 | 14 | 2 |" in card  # attempts per class
-    assert "Version `v1`" in card
+    assert "Version `v2`" in card
 
 
-def test_v1_needs_the_p6_report(ready):
+def test_v2_needs_the_p6_report(ready):
     with pytest.raises(FileNotFoundError, match="p6_textfooler"):
-        p10.run(ready, version="v1")
+        p10.run(ready, version="v2")
 
 
-def test_v1_push_needs_the_v0_tag_and_never_uploads_v0_files(ready_v1):
+def test_v2_push_needs_the_v1_tag_and_never_uploads_v1_files(ready_v2):
     api = FakeApi(tags=[])
-    with pytest.raises(RuntimeError, match="tag 'v0' does not exist"):
-        p10.run(ready_v1, version="v1", do_push=True, api=api)
-    api = FakeApi(tags=["v0"])
-    out = p10.run(ready_v1, version="v1", do_push=True, api=api)
-    assert out["push"]["tag"] == "v1"
+    with pytest.raises(RuntimeError, match="tag 'v1' does not exist"):
+        p10.run(ready_v2, version="v2", do_push=True, api=api)
+    api = FakeApi(tags=["v0", "v1"])
+    out = p10.run(ready_v2, version="v2", do_push=True, api=api)
+    assert out["push"]["tag"] == "v2"
     (_, up), (_, tag) = api.calls
     uploaded = sorted(p.name for p in Path(up["folder_path"]).rglob("*"))
     assert "train.parquet" not in uploaded and "test.parquet" in uploaded
-    assert tag["tag"] == "v1"
+    assert tag["tag"] == "v2"
 
 
-def test_v1_refuses_an_existing_tag(ready_v1):
-    api = FakeApi(tags=["v0", "v1"])
+def test_v2_refuses_an_existing_tag(ready_v2):
+    api = FakeApi(tags=["v0", "v1", "v2"])
     with pytest.raises(RuntimeError, match="already exists"):
-        p10.run(ready_v1, version="v1", do_push=True, api=api)
+        p10.run(ready_v2, version="v2", do_push=True, api=api)
 
 
 def test_unknown_version(ready):
@@ -396,8 +411,8 @@ def test_card_is_short_and_has_sources_splits_and_how_it_was_built(ready):
 
 
 def test_card_only_uploads_just_the_readme_and_never_tags(ready):
-    api = FakeApi(tags=["v0"])
-    out = p10.run(ready, version="v0", do_push=True, card_only=True, api=api)
+    api = FakeApi(tags=["v0", "v1"])
+    out = p10.run(ready, version="v1", do_push=True, card_only=True, api=api)
     assert out["uploads"] == [] and out["card_push"]["tag_moved"] is False
     ((kind, up),) = api.calls  # one upload_file call: no upload_folder, no create_tag
     assert kind == "upload_file" and up["path_in_repo"] == "README.md"
@@ -414,7 +429,20 @@ def test_card_only_needs_the_tag_a_private_repo_and_the_gate(ready):
     with pytest.raises(RuntimeError, match="does not exist"):
         p10.run(ready, do_push=True, card_only=True, api=FakeApi(tags=[]))
     with pytest.raises(RuntimeError, match="not private"):
-        p10.run(ready, do_push=True, card_only=True, api=FakeApi(private=False, tags=["v0"]))
+        p10.run(ready, do_push=True, card_only=True, api=FakeApi(private=False, tags=["v0", "v1"]))
     _write_p7(ready, status="PUSH BLOCKED", exit_code=2)
     with pytest.raises(p10.PushBlockedError):
-        p10.run(ready, do_push=True, card_only=True, api=FakeApi(tags=["v0"]))
+        p10.run(ready, do_push=True, card_only=True, api=FakeApi(tags=["v0", "v1"]))
+
+
+def test_v0_data_cannot_be_staged_again(ready):
+    """v0 is on the Hub with the old columns; the local files are in the v1 format."""
+    with pytest.raises(RuntimeError, match="v0 is already on the Hub"):
+        p10.run(ready, version="v0")
+
+
+def test_new_configs_and_hub_columns_per_version():
+    assert p10.new_configs("v1") == ["bipia", "nemotron"]
+    assert p10.new_configs("v2") == ["bipia_textfooler"]
+    assert "instruct" in p10.hub_columns("v0") and len(p10.hub_columns("v0")) == 30
+    assert p10.hub_columns("v1") == p10.hub_columns("v2") == HF_COLUMNS

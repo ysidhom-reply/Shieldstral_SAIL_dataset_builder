@@ -181,7 +181,7 @@ def test_sample_columns(cfg):
     assert pair.pos.split == "test" and pair.pos.scenario == "healthcare"
     assert pair.pos.document_path == "patients.P-1.chart_notes"
     assert pair.pos.injection_span == PRIO and pair.neg.injection_span is None
-    assert '"Review P-1."' in pair.pos.query
+    assert pair.pos.query == "Review P-1."
     assert json.loads(pair.pos.document)["chart_notes"] == "A." + PRIO + "B."
 
 
