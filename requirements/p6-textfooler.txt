@@ -1,25 +1,53 @@
-# P6 (TextFooler against base Shieldstral) runs in its own isolated uv environment on the GPU
-# machine, because TextAttack needs transformers<5 (hence huggingface-hub<1), while the project
-# lock uses huggingface-hub 2.x (P5, P10). Run:
-#   uv run --isolated --no-project --with-editable . --with-requirements requirements/p6-textfooler.txt dataset-builder p6-textfooler
+# GPU environment for P6 (TextFooler test set) and P8 (training variants): `.venv-p6`
+# (git-ignored), separate from the project's `.venv`. Versions below are the ones tested on the
+# 24 GB RTX 5090 laptop (2026-11-26). Build it with:
 #
-# Also needed, outside this file:
-#  - a CUDA build of torch matching the driver (install it first, see pytorch.org);
-#  - the judge (gpt-oss-20b) is loaded in the step from `textfooler.judge_path`. Its weights are
-#    MXFP4: without the MXFP4 kernels (packages `kernels` and triton; `triton-windows` on Windows)
-#    transformers expands them to bf16 (about 40 GB), which does not fit a 24 GB GPU.
-#    transformers accepts kernels >=0.18.2,<0.19 only; the judge checks this before loading.
-#  - the weights in models/ (git-ignored), downloaded once at the revisions pinned in the config.
+#   uv venv .venv-p6 --python 3.12
+#   $env:VIRTUAL_ENV=".venv-p6"   (bash: export VIRTUAL_ENV=.venv-p6)
+#   uv pip install torch --index-url https://download.pytorch.org/whl/cu130
+#   uv pip install -e . -r requirements/p6-textfooler.txt
+#   uv pip install --no-deps textattack==0.3.11
+#   .venv-p6/Scripts/dataset-builder p8-variants        (or p6-textfooler)
 #
-# OPEN: Shieldstral may need a newer transformers than TextAttack allows. If the first GPU run
-# cannot load it here, score with Shieldstral in the same environment only after checking its model
-# card, or run the attack with a surrogate and measure the transfer (see the P6 plan).
-textattack==0.3.11
-flair>=0.15
+# Notes:
+#  - Shieldstral needs transformers 5 (model type ministral3). TextAttack is installed WITHOUT its
+#    dependencies: its flair dependency pins transformers<5. TextFooler does not use flair (its
+#    part-of-speech check uses NLTK); steps/p6_attack.py registers a stand-in that fails loudly if
+#    anything calls flair.
+#  - gpt-oss-20b (judge) ships MXFP4 weights (about 13 GB). transformers accepts `kernels`
+#    >=0.18.2,<0.19 only; without it the weights are expanded to bf16 (about 40 GB) and do not fit.
+#    The judge checks this before loading.
+#  - Qwen3-14B (P8 generator) is 28 GB in bf16: it loads in 8-bit with bitsandbytes (about 15 GB).
+#  - The model weights are in models/ (git-ignored), downloaded once at the revisions in the config.
+transformers>=5.13,<6
+accelerate>=1.10
+kernels>=0.18.2,<0.19
+triton-windows>=3.9; sys_platform == "win32"
+bitsandbytes>=0.48
+mistral-common>=1.11.5
+numpy
+# TextAttack's own dependencies, minus flair (see above); textattack itself goes in with --no-deps
 tensorflow>=2.16
 tensorflow-hub>=0.16
 tf-keras>=2.16
 setuptools<81                  # tensorflow-hub still imports pkg_resources
-torch
-transformers<5
-accelerate
+bert-score
+editdistance
+filelock
+language_tool_python
+lemminflect
+lru-dict
+datasets>=2.4.0
+nltk
+pandas
+scipy
+terminaltables
+tqdm
+word2number
+num2words
+more-itertools
+pinyin>=0.4.0
+jieba
+OpenHowNet
+Levenshtein
+langdetect

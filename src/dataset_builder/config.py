@@ -61,6 +61,51 @@ class BenignCheckCfg(_Strict):
     shieldstral_4bit: Literal["auto", "on", "off"]
 
 
+class JudgeCfg(_Strict):
+    """A local judge of modified texts (P6 test variants, P8 training variants)."""
+
+    model: str
+    revision: str | None = None
+    path: Path | None = None  # local weights (pinned download)
+    backend: Literal["transformers", "server"] = "transformers"  # in-process or local server
+    batch_size: int = 8  # prompts per generate call (transformers backend)
+    keep_loaded: bool = False  # False: free the GPU after each judge phase
+    load_in_4bit: bool = False  # bitsandbytes 4-bit (for a model too big for the GPU in bf16)
+    base_url: str = "http://127.0.0.1:11434/v1"  # server backend: must be this machine
+    reasoning_effort: Literal["low", "medium", "high"] = "low"  # gpt-oss; ignored by others
+    max_tokens: int = 1024
+    timeout_s: float = 300
+
+
+class GeneratorCfg(_Strict):
+    """P8: the local LLM that writes TextFooler-style training variants."""
+
+    model: str
+    revision: str | None = None
+    path: Path | None = None
+    load_in_8bit: bool = True
+    temperature: float = 0.7
+    top_p: float = 0.8
+    top_k: int = 20
+    max_new_tokens: int = 256
+    batch_size: int = 16
+
+
+class P8Cfg(_Strict):
+    generator: GeneratorCfg
+    judge: JudgeCfg
+    train_pairs: int = 4000
+    validation_pairs: int = 400
+    # pairs per scenario; null = what is left of the split's pairs after the others
+    scenario_pairs: dict[str, dict[str, int | None]] = {}
+    word_count_tolerance: float = 0.10  # the span's word count may change by at most this share
+    pilot_rows: int = 50
+    expected_usable: int = 6500
+    min_pass_rate: float = 0.70  # stop and report if fewer variants pass the rules and the judge
+    nested_sizes: list[int] = [500, 1000, 2000, 4000]
+    human_check_n: int = 80
+
+
 class TextFoolerCfg(_Strict):
     victim_model: str
     victim_revision: str | None = None  # pinned Hugging Face commit
@@ -75,16 +120,7 @@ class TextFoolerCfg(_Strict):
     use_threshold: float = 0.840845057
     use_window: int = 15
     max_span_fraction: float = 0.30  # at most 30% of the span's words changed
-    judge_model: str
-    judge_revision: str | None = None
-    judge_path: Path | None = None  # local weights (pinned download)
-    judge_backend: Literal["transformers", "server"] = "transformers"  # in-process or local server
-    judge_batch_size: int = 8  # prompts per generate call (transformers backend)
-    judge_keep_loaded: bool = False  # False: free the GPU after each judge phase
-    judge_base_url: str = "http://127.0.0.1:11434/v1"  # must be this machine
-    judge_reasoning_effort: Literal["low", "medium", "high"] = "low"
-    judge_max_tokens: int = 1024
-    judge_timeout_s: float = 300
+    judge: JudgeCfg  # the test-set judge (to become a Gemma model; see the P8 plan)
     round_size: int = 300  # candidates per round: victim phase, then judge phase
     chunk_size: int = 50  # the victim phase saves its results every this many candidates
     pilot_pairs: int = 200
@@ -98,14 +134,6 @@ class TextFoolerCfg(_Strict):
     twin_sets: int = 1000
     human_check_n: int = 80
     max_projected_hours: float = 72
-
-
-class GeneratorCfg(_Strict):
-    """P8: the local LLM that writes training variants."""
-
-    model: str
-    revision: str | None = None
-    path: Path | None = None
 
 
 class NemotronCfg(_Strict):
@@ -229,7 +257,7 @@ class Config(_Strict):
     bipia: BipiaCfg
     benign_check: BenignCheckCfg
     textfooler: TextFoolerCfg
-    generator: GeneratorCfg | None = None
+    p8: P8Cfg | None = None
     nemotron: NemotronCfg
     p3: P3Cfg
     p4: P4Cfg
@@ -255,10 +283,13 @@ def load_config(path: Path = DEFAULT_CONFIG) -> Config:
     def under_root(p: Path | None) -> Path | None:
         return p if p is None or p.is_absolute() else root / p
 
+    def judge_under_root(j: JudgeCfg) -> JudgeCfg:
+        return j.model_copy(update={"path": under_root(j.path)})
+
     tf = cfg.textfooler.model_copy(
         update={
             "victim_path": under_root(cfg.textfooler.victim_path),
-            "judge_path": under_root(cfg.textfooler.judge_path),
+            "judge": judge_under_root(cfg.textfooler.judge),
         }
     )
     update: dict[str, Any] = {
@@ -267,9 +298,10 @@ def load_config(path: Path = DEFAULT_CONFIG) -> Config:
         "p3": p3,
         "textfooler": tf,
     }
-    if cfg.generator is not None:
-        update["generator"] = cfg.generator.model_copy(
-            update={"path": under_root(cfg.generator.path)}
+    if cfg.p8 is not None:
+        gen = cfg.p8.generator.model_copy(update={"path": under_root(cfg.p8.generator.path)})
+        update["p8"] = cfg.p8.model_copy(
+            update={"generator": gen, "judge": judge_under_root(cfg.p8.judge)}
         )
     return cfg.model_copy(update=update)
 

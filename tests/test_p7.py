@@ -373,6 +373,8 @@ def test_run_exit_code_1_on_a_data_failure(files):
     assert p7.run(files)["exit_code"] == p7.EXIT_DATA
 
 
-def test_v2_is_not_built_yet(files):
+def test_an_unknown_version_is_refused_and_v2_needs_its_reports(files):
     with pytest.raises(p7.P7NotReadyError):
+        p7.run(files, version="v3")
+    with pytest.raises(FileNotFoundError):  # v2 needs the P6 and P8 reports
         p7.run(files, version="v2")

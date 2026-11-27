@@ -512,7 +512,12 @@ HUMAN_COLUMNS = (
 
 
 def write_human_check(
-    cfg: Config, results: list[dict[str, Any]], sources: dict[str, dict[str, Any]]
+    cfg: Config,
+    results: list[dict[str, Any]],
+    sources: dict[str, dict[str, Any]],
+    *,
+    n: int | None = None,
+    step: str = "p6",
 ) -> Path:
     """`human_check_n` judged variants spread over scenario and class (kept and judge-rejected, so
     agreement measures both kinds of error), shuffled with the seed. `human_verdict` is empty."""
@@ -520,17 +525,17 @@ def write_human_check(
     strata: dict[tuple[str, int], list[dict[str, Any]]] = {}
     for r in sorted(judged, key=lambda r: r["key"]):
         strata.setdefault((r["scenario"], r["label"]), []).append(r)
-    r_ = rng("p6:human_check", cfg)
+    r_ = rng(f"{step}:human_check", cfg)
     for items in strata.values():
         r_.shuffle(items)
     keys = sorted(strata)
     picked: list[dict[str, Any]] = []
     i = 0
-    n = cfg.textfooler.human_check_n
+    n = cfg.textfooler.human_check_n if n is None else n
     while len(picked) < n and any(i < len(strata[k]) for k in keys):
         picked += [strata[k][i] for k in keys if i < len(strata[k])][: n - len(picked)]
         i += 1
-    path = report_path(cfg, "p6_human_check.csv").with_name("human_check.csv")
+    path = report_path(cfg, f"{step}_human_check.csv").with_name("human_check.csv")
     with path.open("w", encoding="utf-8", newline="") as f:
         w = csv.DictWriter(f, fieldnames=HUMAN_COLUMNS)
         w.writeheader()

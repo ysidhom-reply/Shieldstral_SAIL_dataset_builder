@@ -43,10 +43,12 @@ NEMOTRON_FIELDS = (
     "sentence_repaired",
 )
 TEXTFOOLER_FIELDS = ("victim_model",)
-# Extra column of the `bipia_textfooler` config only (v0 files keep their 30 columns). Values
-# that are the same on every row (judge, generator, attack settings) go in the dataset card;
-# pipeline bookkeeping (judge verdicts, attempt status) stays in data/interim and reports/p6.
-TEXTFOOLER_ONLY_FIELDS = ("p_yes_base",)
+# Extra columns of the `bipia_textfooler` config only (v0 files keep their 30 columns). The test
+# variants (P6) and the training variants (P8) have different judges, so the judge and the
+# generator are per row; settings that are the same on every row go in the dataset card, and
+# pipeline bookkeeping (judge verdicts, attempt status) stays in data/interim and reports.
+TEXTFOOLER_ONLY_FIELDS = ("p_yes_base", "generator_model", "judge_model", "nested_size")
+NESTED_SIZES = (500, 1000, 2000, 4000)  # the brief's sizes (the config sets the ones used)
 
 # Allowed generation methods per (source, label).
 _METHODS: dict[tuple[str, int], set[str]] = {
@@ -142,9 +144,39 @@ class Sample(BaseModel):
 
 
 class TextFoolerSample(Sample):
-    """A `bipia_textfooler` row: the shared columns plus the TextFooler-only one."""
+    """A `bipia_textfooler` row: the shared columns plus the TextFooler-only ones.
+
+    Test rows (P6): `textfooler` variants and `control` twins, split test, no generator.
+    Training rows (P8): `llm_textfooler_style`, split train or validation, written by
+    `generator_model`, judged by `judge_model`, no attacked model (`victim_model` empty);
+    `nested_size` (train only) is the smallest nested training subset that holds the row."""
 
     p_yes_base: float | None = None  # base Shieldstral's probability of yes on this row
+    generator_model: str | None = None  # P8: the LLM that wrote the variant
+    judge_model: str | None = None  # the model that judged the variant (None on a control)
+    nested_size: int | None = None  # P8 train: smallest nested subset holding it (None = none)
+
+    @model_validator(mode="after")
+    def _check_textfooler(self) -> Self:
+        errors: list[str] = []
+        llm = self.generation_method == "llm_textfooler_style"
+        if llm:
+            if self.split not in ("train", "validation"):
+                errors.append("a training variant must be in train or validation")
+            if not self.generator_model or not self.judge_model:
+                errors.append("a training variant needs generator_model and judge_model")
+            if self.victim_model is not None:
+                errors.append("a training variant was not attacked: victim_model must be None")
+            if self.nested_size is not None and (self.split != "train" or self.nested_size <= 0):
+                errors.append(f"nested_size {self.nested_size} invalid for split {self.split}")
+        else:
+            if self.split != "test":
+                errors.append("a TextFooler test variant or control must be in test")
+            if self.generator_model is not None or self.nested_size is not None:
+                errors.append("generator_model and nested_size are only set on training variants")
+        if errors:
+            raise ValueError("; ".join(errors))
+        return self
 
 
 COLUMNS: tuple[str, ...] = tuple(Sample.model_fields)

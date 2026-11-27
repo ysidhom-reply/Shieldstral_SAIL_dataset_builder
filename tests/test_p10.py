@@ -14,7 +14,8 @@ from dataset_builder.steps import p10_push as p10
 
 SIZES = {("bipia", "train"): 8, ("bipia", "validation"): 4, ("bipia", "test"): 6}
 SIZES[("nemotron", "test")] = 4
-SIZES[("bipia_textfooler", "test")] = 4
+SIZES[("bipia_textfooler", "test")] = 6  # 2 variants, 2 plain twins, 2 perturbed twins
+TRAINING = {("bipia_textfooler", "train"): 8, ("bipia_textfooler", "validation"): 4}
 
 
 def _table(config: str, split: str, n: int, extra: bool = False) -> pa.Table:
@@ -22,7 +23,8 @@ def _table(config: str, split: str, n: int, extra: bool = False) -> pa.Table:
     cols["sample_id"] = [f"{config}-{split}-{i}" for i in range(n)]
     cols["source"] = [config] * n
     cols["split"] = [split] * n
-    cols["label"] = [i % 2 for i in range(n)]
+    tf_test = (config, split) == ("bipia_textfooler", "test")
+    cols["label"] = [int(i % 3 == 0) if tf_test else i % 2 for i in range(n)]
     cols["document"] = ["some document"] * n
     cols["protected_tokens"] = [[] for _ in range(n)]
     if extra:
@@ -85,7 +87,7 @@ def _write_reports(cfg, failures=None, p4_train=8):
 def _write_p6(cfg):
     bucket = {"processed": 30, "skipped": 4, "succeeded": 12, "failed": 14, "kept": 2}
     payload = {
-        "split": {"test": 4},
+        "split": {"test": 6},
         "failures": [],
         "stats": {
             "by_bucket": {"email/1": bucket, "email/0": bucket},
@@ -320,7 +322,7 @@ def test_v1_stages_only_the_new_config_and_a_card_with_the_textfooler_section(re
         if p.is_file()
     )
     assert staged == ["README.md", "bipia_textfooler/test.parquet"]  # v0 files not uploaded again
-    assert out["uploads"] == ["bipia_textfooler"] and out["gate"]["ok"]
+    assert out["uploads"] == ["bipia_textfooler/test"] and out["gate"]["ok"]
     card = out["card"].read_text(encoding="utf-8")
     assert "config_name: bipia_textfooler" in card and "config_name: bipia" in card
     assert "How `bipia_textfooler` was built" in card and "Not yet included" not in card
@@ -418,3 +420,49 @@ def test_card_only_needs_the_tag_a_private_repo_and_the_gate(ready):
     _write_p7(ready, status="PUSH BLOCKED", exit_code=2)
     with pytest.raises(p10.PushBlockedError):
         p10.run(ready, do_push=True, card_only=True, api=FakeApi(tags=["v0"]))
+
+
+@pytest.fixture
+def ready_v2(ready_v1):
+    for (config, split), n in TRAINING.items():
+        pq.write_table(_table(config, split, n), ready_v1.paths.out / config / f"{split}.parquet")
+    payload = {
+        "split": {"train": 8, "validation": 4},
+        "failures": [],
+        "overall": {"kept": 12, "pass_rate": 0.8},
+        "assembly": {
+            "train": {"per_class": 4, "nested": {"500": None, "1000": None}},
+            "validation": {"per_class": 2, "nested": {}},
+        },
+        "info": {"generator": "Qwen/Qwen3-14B", "generator_revision": "abc", "judge": "gpt-oss"},
+    }
+    path = ready_v1.paths.reports / "p8" / "p8_training_variants.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    _write_p7(ready_v1, "v2")
+    return ready_v1
+
+
+def test_v2_stages_only_the_training_files_with_a_card_section(ready_v2):
+    out = p10.run(ready_v2, version="v2")
+    staged = sorted(
+        p.relative_to(out["stage_dir"]).as_posix()
+        for p in out["card"].parent.rglob("*")
+        if p.is_file()
+    )
+    assert staged == [
+        "README.md",
+        "bipia_textfooler/train.parquet",
+        "bipia_textfooler/validation.parquet",
+    ]  # v0 and v1 files are not uploaded again
+    card = out["card"].read_text(encoding="utf-8")
+    assert "path: bipia_textfooler/train.parquet" in card
+    assert "path: bipia_textfooler/test.parquet" in card
+    assert "training variants were built (v2)" in card and "Qwen/Qwen3-14B" in card
+    assert out["files"]["bipia_textfooler/train"]["rows"] == 8
+
+
+def test_v2_needs_the_p8_report(ready_v1):
+    _write_p7(ready_v1, "v2")
+    with pytest.raises(FileNotFoundError, match="p8_training_variants"):
+        p10.run(ready_v1, version="v2")

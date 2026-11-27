@@ -371,8 +371,10 @@ def _variant_row(
     rec: dict[str, Any],
     benign: dict[str, str],
     scorer_name: str,
+    judge_name: str | None,
     method: str,
     prefix: str,
+    extra: dict[str, Any] | None = None,
 ) -> TextFoolerSample:
     span = locate_span(src, benign.get(src.get("benign_id") or ""))
     new = rec["new_span"]
@@ -387,7 +389,9 @@ def _variant_row(
         "protected_tokens": rec["protected_tokens"],
         "victim_model": scorer_name,
         "p_yes_base": rec["p_new"],
+        "judge_model": judge_name,
     }
+    fields |= extra or {}
     if rec["label"] == 1:
         fields["injection_span"] = span.inserted(new)
     else:
@@ -410,7 +414,15 @@ def assemble(
     rows: list[TextFoolerSample] = []
     for r in kept_mal:
         rows.append(
-            _variant_row(sources[r["sample_id"]], r, runner.benign, victim, "textfooler", "tf-")
+            _variant_row(
+                sources[r["sample_id"]],
+                r,
+                runner.benign,
+                victim,
+                runner.judge.name,
+                "textfooler",
+                "tf-",
+            )
         )
     main = [r for r in kept_mal if r["attack_group"] != runner.tf.translation_group]
     counts: dict[str, Any] = {"malicious_kept": Counter(r["scenario"] for r in kept_mal)}
@@ -456,7 +468,15 @@ def assemble(
         chosen += pool[: need[s]]
     for r in chosen:
         rows.append(
-            _variant_row(sources[r["sample_id"]], r, runner.benign, victim, "textfooler", "tfb-")
+            _variant_row(
+                sources[r["sample_id"]],
+                r,
+                runner.benign,
+                victim,
+                runner.judge.name,
+                "textfooler",
+                "tfb-",
+            )
         )
     counts |= {"control": len(controls), "perturbed_twins": len(chosen), "twin_cap": twin_cap}
     counts["control_p"] = control_p
@@ -468,7 +488,7 @@ def assemble(
 
 def build_models(cfg: Config) -> tuple[Engine, Judge]:
     scorer = CachedScorer(ShieldstralScorer(cfg.textfooler))
-    return TextFoolerEngine(cfg.textfooler, scorer), build_judge(cfg.textfooler)
+    return TextFoolerEngine(cfg.textfooler, scorer), build_judge(cfg.textfooler.judge)
 
 
 def run(

@@ -231,6 +231,46 @@ def p6_agreement(
     typer.echo(json.dumps(res, indent=2))
 
 
+@app.command("p8-variants")
+def p8_variants(
+    ctx: typer.Context,
+    rejudge: Annotated[
+        bool,
+        typer.Option("--rejudge", help="Judge again the rows judged with an older judge prompt."),
+    ] = False,
+) -> None:
+    """P8: TextFooler-style training variants (Qwen3-14B writes, gpt-oss judges; needs a GPU).
+    Pilot by default (50 rows, no output file)."""
+    from dataset_builder.steps import p8_variants as p8
+
+    opts: RunOptions = ctx.obj
+    out = p8.run(opts.cfg, force=opts.force, is_pilot=opts.pilot, rejudge=rejudge)
+    rate = out.get("pass_rate")
+    typer.echo(f"results:   {out['results']}")
+    typer.echo(f"pass rate: {'n/a' if rate is None else f'{rate:.1%}'}")
+    if opts.pilot:
+        typer.echo(f"report:    {out['md']}")
+        typer.echo("Pilot done. Read the report, then run --full.")
+    else:
+        typer.echo(f"report:    {out['report']['md']}")
+        typer.echo(f"output:    {out['out']}")
+        typer.echo(f"human check: {out['human_check']}")
+
+
+@app.command("p8-agreement")
+def p8_agreement(
+    path: Annotated[
+        Path | None, typer.Argument(help="human_check.csv (default: reports/p8)")
+    ] = None,
+) -> None:
+    """P8: agreement between the person's verdicts and the judge's in human_check.csv."""
+    from dataset_builder.config import load_config
+    from dataset_builder.steps.p6_report import human_agreement
+
+    path = path or load_config().paths.reports / "p8" / "human_check.csv"
+    typer.echo(json.dumps(human_agreement(path), indent=2))
+
+
 @app.command("p7-checks")
 def p7_checks(
     ctx: typer.Context,

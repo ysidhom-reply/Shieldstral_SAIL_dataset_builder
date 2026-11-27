@@ -228,7 +228,7 @@ def test_the_judge_must_be_local(cfg):
     check_local("http://localhost:8000/v1")
     with pytest.raises(ValueError, match="not this machine"):
         check_local("https://api.example.com/v1")
-    bad = cfg.textfooler.model_copy(update={"judge_base_url": "https://api.example.com/v1"})
+    bad = cfg.textfooler.judge.model_copy(update={"base_url": "https://api.example.com/v1"})
     with pytest.raises(ValueError):
         LocalJudge(bad)
 
@@ -246,10 +246,10 @@ def test_local_judge_posts_and_retries_an_unusable_answer(cfg):
     client = httpx.Client(
         base_url="http://127.0.0.1:11434/v1", transport=httpx.MockTransport(handler)
     )
-    judge = LocalJudge(cfg.textfooler, client=client)
+    judge = LocalJudge(cfg.textfooler.judge, client=client)
     (v,) = judge.verdicts([("a b", "a c", 1, "email")])
     assert v == Verdict(True, True, "ok") and judge.unparsed == 1 and judge.calls == 2
-    assert sent[0]["reasoning_effort"] == cfg.textfooler.judge_reasoning_effort
+    assert sent[0]["reasoning_effort"] == cfg.textfooler.judge.reasoning_effort
     assert "malicious" in sent[0]["messages"][1]["content"]
 
 
@@ -422,7 +422,7 @@ def test_full_run_writes_variants_controls_and_perturbed_twins(data):
         [r for r in by[("textfooler", 1)] if r["attack_group"] != "Language Translation"]
     )
     for r in by[("textfooler", 1)]:
-        assert "judge_model" not in r and r["p_yes_base"] < 0.5
+        assert r["judge_model"] == "fake-judge" and r["p_yes_base"] < 0.5
         assert r["document"] != src[r["parent_id"]]["document"] and r["injection_span"]
     for r in by[("control", 0)]:
         parent = src[r["parent_id"]]  # a plain twin is the negative, unchanged
@@ -634,12 +634,12 @@ def test_build_judge_picks_the_backend(cfg, tmp_path):
     from dataset_builder.steps.p6_judge import LocalJudge, TransformersJudge, build_judge
 
     (tmp_path / "config.json").write_text("{}")
-    tf = cfg.textfooler.model_copy(update={"judge_path": tmp_path, "judge_backend": "transformers"})
+    tf = cfg.textfooler.judge.model_copy(update={"path": tmp_path, "backend": "transformers"})
     assert isinstance(build_judge(tf), TransformersJudge)  # nothing loaded until the first call
     assert build_judge(tf).verdicts([]) == []
-    assert isinstance(build_judge(tf.model_copy(update={"judge_backend": "server"})), LocalJudge)
+    assert isinstance(build_judge(tf.model_copy(update={"backend": "server"})), LocalJudge)
     with pytest.raises(RuntimeError):
-        build_judge(tf.model_copy(update={"judge_path": tmp_path / "missing"}))
+        build_judge(tf.model_copy(update={"path": tmp_path / "missing"}))
 
 
 def test_round_take_sizes_the_next_round_from_the_keep_rate():

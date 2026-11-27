@@ -1,0 +1,222 @@
+{
+  "pilot": true,
+  "overall": {
+    "rows": 50,
+    "no_editable": 0,
+    "rule_rejected": 6,
+    "judge_disagrees": 0,
+    "judge_rejected": 4,
+    "pending_judge": 0,
+    "kept": 40,
+    "pass_rate": 0.8,
+    "judge_rejection_rate": 0.09090909090909091,
+    "retried": 6,
+    "words_changed_pct": 0.1253452504350169,
+    "base_wrong_share": 0.475,
+    "seconds_per_row": 2.46168
+  },
+  "by_bucket": {
+    "train/code/0": {
+      "rows": 8,
+      "no_editable": 0,
+      "rule_rejected": 1,
+      "judge_disagrees": 0,
+      "judge_rejected": 0,
+      "pending_judge": 0,
+      "kept": 7,
+      "pass_rate": 0.875,
+      "judge_rejection_rate": 0.0,
+      "retried": 1,
+      "words_changed_pct": 0.07745995423340961,
+      "base_wrong_share": 0.0,
+      "seconds_per_row": 2.457875
+    },
+    "train/code/1": {
+      "rows": 8,
+      "no_editable": 0,
+      "rule_rejected": 1,
+      "judge_disagrees": 0,
+      "judge_rejected": 0,
+      "pending_judge": 0,
+      "kept": 7,
+      "pass_rate": 0.875,
+      "judge_rejection_rate": 0.0,
+      "retried": 1,
+      "words_changed_pct": 0.12554112554112554,
+      "base_wrong_share": 1.0,
+      "seconds_per_row": 2.457875
+    },
+    "train/email/0": {
+      "rows": 9,
+      "no_editable": 0,
+      "rule_rejected": 2,
+      "judge_disagrees": 0,
+      "judge_rejected": 0,
+      "pending_judge": 0,
+      "kept": 7,
+      "pass_rate": 0.7777777777777778,
+      "judge_rejection_rate": 0.0,
+      "retried": 2,
+      "words_changed_pct": 0.13538445681302824,
+      "base_wrong_share": 0.0,
+      "seconds_per_row": 2.3838888888888885
+    },
+    "train/email/1": {
+      "rows": 9,
+      "no_editable": 0,
+      "rule_rejected": 1,
+      "judge_disagrees": 0,
+      "judge_rejected": 2,
+      "pending_judge": 0,
+      "kept": 6,
+      "pass_rate": 0.6666666666666666,
+      "judge_rejection_rate": 0.25,
+      "retried": 1,
+      "words_changed_pct": 0.10204610204610204,
+      "base_wrong_share": 1.0,
+      "seconds_per_row": 2.4684444444444447
+    },
+    "train/table/0": {
+      "rows": 8,
+      "no_editable": 0,
+      "rule_rejected": 0,
+      "judge_disagrees": 0,
+      "judge_rejected": 1,
+      "pending_judge": 0,
+      "kept": 7,
+      "pass_rate": 0.875,
+      "judge_rejection_rate": 0.125,
+      "retried": 0,
+      "words_changed_pct": 0.1550720288115246,
+      "base_wrong_share": 0.0,
+      "seconds_per_row": 2.553
+    },
+    "train/table/1": {
+      "rows": 8,
+      "no_editable": 0,
+      "rule_rejected": 1,
+      "judge_disagrees": 0,
+      "judge_rejected": 1,
+      "pending_judge": 0,
+      "kept": 6,
+      "pass_rate": 0.75,
+      "judge_rejection_rate": 0.14285714285714285,
+      "retried": 1,
+      "words_changed_pct": 0.15788840788840788,
+      "base_wrong_share": 1.0,
+      "seconds_per_row": 2.457875
+    }
+  },
+  "rule_reasons": {
+    "no word changed": 4,
+    "word count N -> N (tolerance N%)": 1,
+    "N/N words changed (cap N%)": 1
+  },
+  "sampling": {
+    "train": {
+      "split": "train",
+      "wanted": {
+        "email": 170,
+        "code": 280,
+        "table": 950
+      },
+      "available": {
+        "email": 486,
+        "table": 7860,
+        "code": 800
+      },
+      "taken": {
+        "email": 170,
+        "table": 950,
+        "code": 280
+      },
+      "short": {}
+    },
+    "validation": {
+      "split": "validation",
+      "wanted": {
+        "email": 24,
+        "code": 40,
+        "table": 136
+      },
+      "available": {
+        "email": 149,
+        "table": 1307,
+        "code": 200
+      },
+      "taken": {
+        "email": 24,
+        "table": 136,
+        "code": 40
+      },
+      "short": {}
+    }
+  },
+  "assembly": null,
+  "split": {},
+  "times": {
+    "generate": 81.95399999999972,
+    "judge": 61.1869999999999,
+    "score": 7.765999999999622
+  },
+  "seconds": 158.76500000000124,
+  "projected_hours": 2.6827911111110976,
+  "info": {
+    "generator": "Qwen/Qwen3-14B",
+    "generator_revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+    "generator_8bit": true,
+    "decoding": {
+      "temperature": 0.7,
+      "top_p": 0.8,
+      "top_k": 20,
+      "max_new_tokens": 256,
+      "thinking": false,
+      "seed": 42
+    },
+    "generator_calls": 56,
+    "generator_loads": 1,
+    "generator_tokens_per_s": 64.5,
+    "generator_peak_gpu_gb": 18.41,
+    "judge": "openai/gpt-oss-20b",
+    "judge_backend": "transformers",
+    "judge_path": "C:\\Users\\shieldstral_user\\Shieldstral_SAIL_dataset_builder\\models\\gpt-oss-20b",
+    "judge_4bit": false,
+    "judge_revision": "6cee5e81ee83917806bbde320786a8fb61efebee",
+    "reasoning_effort": "low",
+    "judge_calls": 80,
+    "judge_unparsed": 0,
+    "judge_loads": 1,
+    "judge_peak_gpu_gb": 18.41,
+    "victim": "mistralai/Shieldstral-1.0-3B@2bee23abfda3100a092272f402910449148a4a64",
+    "victim_dtype": "bfloat16",
+    "answer_token_ids": {
+      "yes": [
+        13059,
+        13830,
+        14842,
+        16860,
+        51935,
+        57445
+      ],
+      "no": [
+        1836,
+        2649,
+        3501,
+        4753,
+        14089,
+        16071
+      ]
+    },
+    "tokenizer": "mistral-common",
+    "victim_loads": 1,
+    "victim_peak_gpu_gb": 18.41,
+    "versions": {
+      "torch": "2.14.1+cu130",
+      "transformers": "5.24.1",
+      "mistral-common": "1.13.1",
+      "textattack": "0.3.11"
+    },
+    "documents_requested": 40,
+    "documents_scored": 40
+  }
+}

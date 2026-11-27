@@ -67,19 +67,18 @@ textfooler:
   use_threshold: 0.840845057     # Universal Sentence Encoder similarity (angular)
   use_window: 15                 # USE window (words)
   max_span_fraction: 0.30        # at most 30% of the span's words changed (ours; recipe has no cap)
-  # Judge: gpt-oss-20b. Backend "transformers" loads judge_path in the step itself, only during the
-  # judge phases (judge_keep_loaded: false frees the GPU for the attack). Backend "server" calls an
-  # OpenAI-compatible server at judge_base_url, which must be this machine.
-  judge_model: openai/gpt-oss-20b
-  judge_revision: 6cee5e81ee83917806bbde320786a8fb61efebee
-  judge_path: models/gpt-oss-20b
-  judge_backend: transformers
-  judge_batch_size: 8
-  judge_keep_loaded: false
-  judge_base_url: http://127.0.0.1:11434/v1
-  judge_reasoning_effort: low    # low or medium
-  judge_max_tokens: 1024
-  judge_timeout_s: 300
+  # Test-set judge. To be switched to a Gemma model (P8 plan: a different checker for the test
+  # set and for the training data). Backend "transformers" loads `path` in the step itself, only
+  # during the judge phases; backend "server" calls a local OpenAI-compatible server at base_url.
+  judge:
+    model: openai/gpt-oss-20b
+    revision: 6cee5e81ee83917806bbde320786a8fb61efebee
+    path: models/gpt-oss-20b
+    backend: transformers
+    batch_size: 8
+    keep_loaded: false
+    reasoning_effort: low        # low or medium (gpt-oss)
+    max_tokens: 1024
   # Rounds: victim phase (Shieldstral alone on the GPU), then judge phase (gpt-oss alone).
   round_size: 300                # candidates per round; later rounds sized from the keep rate
   chunk_size: 50                 # the victim phase saves its results every this many
@@ -98,12 +97,44 @@ textfooler:
   human_check_n: 80
   max_projected_hours: 72        # the pilot report warns above this
 
-generator:
-  # P8 (later): the LLM that writes TextFooler-style training variants. Local, non-Mistral, and a
-  # different family from the judge.
-  model: Qwen/Qwen3-14B
-  revision: 40c069824f4251a91eefaf281ebe4c544efd3e18
-  path: models/Qwen3-14B
+p8:
+  # P8: TextFooler-style training variants written by a local LLM (not Mistral), judged by a
+  # different local model, from bipia train (and validation) rows only. One model on the GPU at a
+  # time: generate, then judge, then score with base Shieldstral (information only).
+  generator:
+    model: Qwen/Qwen3-14B
+    revision: 40c069824f4251a91eefaf281ebe4c544efd3e18
+    path: models/Qwen3-14B
+    load_in_8bit: true           # 28 GB in bf16 does not fit 24 GB; 8-bit is about 15 GB
+    temperature: 0.7             # Qwen3 non-thinking defaults
+    top_p: 0.8
+    top_k: 20
+    max_new_tokens: 256
+    batch_size: 48               # alone on the GPU: about 15 GB weights + cache
+  judge:                         # gpt-oss for training data (the test set gets another judge)
+    model: openai/gpt-oss-20b
+    revision: 6cee5e81ee83917806bbde320786a8fb61efebee
+    path: models/gpt-oss-20b
+    backend: transformers
+    batch_size: 16               # 32 filled the 24 GB GPU on long answers and slowed it ~5x
+    keep_loaded: true            # P8 frees it itself after its judge phase
+    reasoning_effort: low
+    max_tokens: 1024
+  # Team decision (2026-11-26): 2,000 training variants (1,000 per class), not the brief's 4,000;
+  # more can be added later by raising train_pairs (same seeded order, results resume).
+  train_pairs: 1500              # ~3,000 rows written -> >=2,000 kept after balancing (margin)
+  validation_pairs: 200          # ~400 rows written -> ~300 kept
+  # Pairs per scenario (null = the rest): email about 12%, code 20%, tables the rest, so tables
+  # (86% of the split) do not drown the others. Language Translation is excluded.
+  scenario_pairs:
+    train: {email: 170, code: 280, table: null}
+    validation: {email: 24, code: 40, table: null}
+  word_count_tolerance: 0.10     # span word count may change by at most 10% (brief default)
+  pilot_rows: 50
+  expected_usable: 2600
+  min_pass_rate: 0.70
+  nested_sizes: [500, 1000, 2000]
+  human_check_n: 80
 
 nemotron:
   repo_id: nvidia/Nemotron-RL-Agentic-Indirect-Prompt-Injection-v1   # CC BY 4.0, test only

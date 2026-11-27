@@ -198,7 +198,7 @@ def run(
     cfg: Config | None = None, *, set_b: Path | None = None, judge: Judge | None = None
 ) -> dict[str, Any]:
     cfg = cfg or load_config()
-    judge = judge or build_judge(cfg.textfooler)
+    judge = judge or build_judge(cfg.textfooler.judge)
     rows = read_parquet(cfg.paths.out / "bipia" / "test.parquet")
     a = score_set_a(judge, set_a(cfg, rows))
     lines = [

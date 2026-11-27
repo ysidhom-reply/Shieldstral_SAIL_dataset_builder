@@ -33,8 +33,13 @@ SCOPE: dict[str, dict[str, tuple[str, ...]]] = {
         "nemotron": ("test",),
         "bipia_textfooler": ("test",),
     },
+    "v2": {
+        "bipia": ("train", "validation", "test"),
+        "nemotron": ("test",),
+        "bipia_textfooler": ("train", "validation", "test"),
+    },
 }
-LATER = {"v2": "needs P8 (bipia_textfooler train/val)"}
+LATER: dict[str, str] = {}
 POSITIONS = ("start", "middle", "end")
 SCEN_ORDER = ("email", "table", "code")
 PRIORITY_MARKERS = ("[PRIORITY MESSAGE]", "[/PRIORITY MESSAGE]")
@@ -1241,6 +1246,110 @@ def check_textfooler(cfg: Config, bipia_test: Rows, rows: Rows) -> list[dict]:
     ]
 
 
+def check_training_variants(
+    cfg: Config, bipia: dict[str, Rows], rows: Rows, test_variants: Rows
+) -> list[dict]:
+    """The `bipia_textfooler` train and validation splits (v2, P8): every row traces to a bipia
+    row of the same split, only the inserted text changed and within the rules, classes are equal,
+    the nested subsets are nested and balanced, and no training text equals a test text."""
+    from dataset_builder.steps.p6_span import locate_span
+    from dataset_builder.steps.p8_rules import check_llm_variant
+
+    c = "bipia_textfooler"
+    cap = cfg.textfooler.max_span_fraction
+    tol = cfg.p8.word_count_tolerance if cfg.p8 else 0.10
+    sizes = sorted(cfg.p8.nested_sizes) if cfg.p8 else [500, 1000, 2000, 4000]
+    parents = {r["sample_id"]: r for s in ("train", "validation") for r in bipia.get(s, [])}
+    ids = [r["sample_id"] for r in rows]
+    untraced = [
+        r["sample_id"]
+        for r in rows
+        if r["parent_id"] not in parents or parents[r["parent_id"]]["split"] != r["split"]
+    ]
+    meta = [
+        r["sample_id"]
+        for r in rows
+        if r["source"] != c
+        or r["generation_method"] != "llm_textfooler_style"
+        or not r["generator_model"]
+        or not r["judge_model"]
+        or r["victim_model"] is not None
+        or r["p_yes_base"] is None
+    ]
+    bipia_ids = set(parents) | {r["sample_id"] for r in bipia.get("test", [])}
+    dup = [i for i, n in Counter(ids).items() if n > 1] + [i for i in ids if i in bipia_ids]
+    labels, outside, rules, texts = [], [], [], []
+    for r in rows:
+        par = parents.get(r["parent_id"])
+        if par is None:
+            continue
+        if r["label"] != par["label"] or r["document"] == par["document"]:
+            labels.append(r["sample_id"])
+        try:
+            old = locate_span(par, None)
+            if r["label"] == 1:
+                new_ins = r["injection_span"]
+            else:
+                new_ins = r["document"][r["benign_span"][0] : r["benign_span"][1]]
+            idx, old_ins = par["insert_index"], old.inserted()
+            tail_ok = r["document"][idx + len(new_ins) :] == par["document"][idx + len(old_ins) :]
+            if (
+                r["document"][:idx] != par["document"][:idx]
+                or not tail_ok
+                or not new_ins.endswith(old.code)
+            ):
+                outside.append(r["sample_id"])
+                continue
+            new_text = new_ins[: len(new_ins) - len(old.code)]
+            texts.append(new_ins.strip())
+            reason, _, _ = check_llm_variant(old, new_text, r["protected_tokens"] or [], cap, tol)
+            if reason:
+                rules.append(f"{r['sample_id']}: {reason}")
+        except (KeyError, TypeError, ValueError) as e:
+            outside.append(f"{r['sample_id']}: {e}")
+    balance = []
+    for split in ("train", "validation"):
+        n = Counter(r["label"] for r in rows if r["split"] == split)
+        if n[0] != n[1]:
+            balance.append(f"{split}: {dict(n)}")
+    nested = []
+    train = [r for r in rows if r["split"] == "train"]
+    for r in train:
+        if r["nested_size"] is not None and r["nested_size"] not in sizes:
+            nested.append(f"{r['sample_id']}: nested_size {r['nested_size']}")
+    for k in sizes:
+        sub = Counter(
+            r["label"] for r in train if r["nested_size"] is not None and r["nested_size"] <= k
+        )
+        if sum(sub.values()) and (sub[1] != k // 2 or sub[0] != k // 2):
+            nested.append(f"subset {k}: {dict(sub)} (expected {k // 2} per class)")
+    test_texts = {(r.get("injection_span") or "").strip() for r in bipia.get("test", [])}
+    for r in test_variants:
+        if r["label"] == 1 and r.get("injection_span"):
+            test_texts.add(r["injection_span"].strip())
+    leaked = sorted({t[:60] for t in texts if t and t in test_texts})
+    by = Counter((r["split"], r["label"]) for r in rows)
+    return [
+        result(
+            "1", "training variants: every parent is a bipia row of the same split", c, untraced
+        ),
+        result("1", "training variants: method, generator, judge and p_yes_base set", c, meta),
+        result("1", "training variants: sample_ids unique and not in bipia", c, dup),
+        result("1", "training variants: label kept, document changed", c, labels),
+        result("1", "training variants: only the inserted text changed", c, outside),
+        result("1", "training variants: rules hold (cap, word count, protected tokens)", c, rules),
+        result("1", "training variants: equal classes in train and validation", c, balance),
+        result("1", "training variants: nested subsets nested and balanced", c, nested),
+        result(
+            "1",
+            "training variants: no training text equals a test text",
+            c,
+            leaked,
+            f"{len(rows):,} rows: {dict(by)}",
+        ),
+    ]
+
+
 # ================================================================ entry point
 
 
@@ -1258,6 +1367,9 @@ def report_counts(cfg: Config, version: str = "v0") -> dict[str, dict[str, int]]
     if "bipia_textfooler" in SCOPE[version]:
         p6 = json.loads(report_path(cfg, "p6_textfooler.json").read_text(encoding="utf-8"))
         out["bipia_textfooler"] = {k: int(v) for k, v in p6["split"].items()}
+    if "train" in SCOPE[version].get("bipia_textfooler", ()):
+        p8 = json.loads(report_path(cfg, "p8_training_variants.json").read_text(encoding="utf-8"))
+        out["bipia_textfooler"] |= {k: int(v) for k, v in p8["split"].items()}
     return out
 
 
@@ -1272,7 +1384,7 @@ def run(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
     cfg = cfg or load_config()
     if version not in SCOPE:
         raise P7NotReadyError(
-            f"P7 {version}: {LATER.get(version, 'unknown version')}; only v0 and v1 can run now."
+            f"P7 {version}: {LATER.get(version, 'unknown version')}; versions: {sorted(SCOPE)}."
         )
     scope = SCOPE[version]
     bipia = load(cfg, "bipia", scope["bipia"])
@@ -1292,8 +1404,11 @@ def run(cfg: Config | None = None, version: str = "v0") -> dict[str, Any]:
     checks += bal + check_balance(cfg, "nemotron", nem)[0]
     checks += check_pairs(bipia, docs) + check_queries(cfg, bipia, docs)
     if "bipia_textfooler" in scope:
-        tf_rows = load(cfg, "bipia_textfooler", scope["bipia_textfooler"])["test"]
-        checks += check_textfooler(cfg, bipia["test"], tf_rows)
+        tf_all = load(cfg, "bipia_textfooler", scope["bipia_textfooler"])
+        checks += check_textfooler(cfg, bipia["test"], tf_all["test"])
+        if "train" in tf_all:
+            train_rows = tf_all["train"] + tf_all["validation"]
+            checks += check_training_variants(cfg, bipia, train_rows, tf_all["test"])
     else:
         checks.append(
             result(

@@ -35,11 +35,22 @@ SPLITS: dict[str, tuple[str, ...]] = {
     "nemotron": ("test",),
     "bipia_textfooler": ("test",),
 }
+# v2 adds the training variants (P8) to `bipia_textfooler`.
+SPLITS_BY_VERSION: dict[str, dict[str, tuple[str, ...]]] = {
+    "v2": {"bipia_textfooler": ("train", "validation", "test")},
+}
 VERSIONS: dict[str, tuple[str, ...]] = {
     "v0": ("bipia", "nemotron"),
     "v1": ("bipia", "nemotron", "bipia_textfooler"),
+    "v2": ("bipia", "nemotron", "bipia_textfooler"),
 }
-# Reports whose `failures` must be empty before anything is pushed (+ P6 for v1).
+# Files each version uploads; earlier files are never uploaded again (None = all of v0).
+NEW_FILES: dict[str, tuple[tuple[str, str], ...] | None] = {
+    "v0": None,
+    "v1": (("bipia_textfooler", "test"),),
+    "v2": (("bipia_textfooler", "train"), ("bipia_textfooler", "validation")),
+}
+# Reports whose `failures` must be empty before anything is pushed (+ P6 from v1, P8 for v2).
 STEP_REPORTS = (
     "p1/p1_counts.json",
     "p2/p2_counts.json",
@@ -71,6 +82,19 @@ def parquet_path(cfg: Config, config: str, split: str) -> Path:
     return cfg.paths.out / config / f"{split}.parquet"
 
 
+def splits(config: str, version: str = "v0") -> tuple[str, ...]:
+    """The splits of a config in a version."""
+    return SPLITS_BY_VERSION.get(version, {}).get(config, SPLITS[config])
+
+
+def new_files(version: str) -> list[tuple[str, str]]:
+    """(config, split) of the parquet files this version uploads."""
+    files = NEW_FILES[version]
+    if files is None:
+        return [(c, sp) for c in configs_of(version) for sp in splits(c, version)]
+    return list(files)
+
+
 def configs_of(version: str) -> list[str]:
     if version not in VERSIONS:
         raise ValueError(f"unknown version {version!r}: choose from {sorted(VERSIONS)}")
@@ -87,7 +111,11 @@ def new_configs(version: str) -> list[str]:
 def load_reports(cfg: Config, version: str = "v0") -> dict[str, dict[str, Any]]:
     """The step reports' JSON, keyed by step (p1 ... p5, p6 for v1, p3hn and p7 when present)."""
     out: dict[str, dict[str, Any]] = {}
-    needed = list(STEP_REPORTS) + (["p6/p6_textfooler.json"] if version == "v1" else [])
+    needed = list(STEP_REPORTS)
+    if version in ("v1", "v2"):
+        needed.append("p6/p6_textfooler.json")
+    if version == "v2":
+        needed.append("p8/p8_training_variants.json")
     for rel in needed:
         path = cfg.paths.reports / rel
         if not path.is_file():
@@ -110,7 +138,10 @@ def expected_rows(reports: dict[str, dict[str, Any]], config: str) -> dict[str, 
     if config == "nemotron":
         return {s: int(n) for s, n in reports["p5"]["split"].items()}
     if config == "bipia_textfooler":
-        return {s: int(n) for s, n in reports["p6"]["split"].items()}
+        out = {s: int(n) for s, n in reports["p6"]["split"].items()}
+        if "p8" in reports:
+            out |= {s: int(n) for s, n in reports["p8"]["split"].items()}
+        return out
     raise ValueError(f"no report gives the counts of config {config!r} yet")
 
 
@@ -128,7 +159,7 @@ def p7_gate(cfg: Config, version: str, configs: list[str]) -> dict[str, Any]:
             "reason": f"{path.name} not found: run `p7-checks --version {version}`",
         }
     data = json.loads(path.read_text(encoding="utf-8"))
-    files = [parquet_path(cfg, c, s) for c in configs for s in SPLITS[c]]
+    files = [parquet_path(cfg, c, s) for c in configs for s in splits(c, version)]
     newest = max((f.stat().st_mtime for f in files if f.is_file()), default=0.0)
     status = data.get("status", "unknown")
     if status != "PUSH ALLOWED" or data.get("exit_code") != 0:
@@ -150,7 +181,7 @@ class PushBlockedError(RuntimeError):
 
 
 def preflight(
-    cfg: Config, configs: list[str], reports: dict[str, dict[str, Any]]
+    cfg: Config, configs: list[str], reports: dict[str, dict[str, Any]], version: str = "v0"
 ) -> dict[str, Any]:
     """Stop unless the step reports passed and the files match them. Returns per-file stats."""
     failed = {step: r["failures"] for step, r in reports.items() if r.get("failures")}
@@ -164,9 +195,10 @@ def preflight(
     errors: list[str] = []
     for config in configs:
         exp = expected_rows(reports, config)
-        if set(exp) != set(SPLITS[config]):
-            errors.append(f"{config}: reports give splits {sorted(exp)}, expected {SPLITS[config]}")
-        for split in SPLITS[config]:
+        want = splits(config, version)
+        if set(exp) != set(want):
+            errors.append(f"{config}: reports give splits {sorted(exp)}, expected {want}")
+        for split in want:
             path = parquet_path(cfg, config, split)
             if not path.is_file():
                 errors.append(f"{config}/{split}: {path} is missing")
@@ -193,8 +225,10 @@ def preflight(
                 errors.append(
                     f"{config}/{split}: {table.num_rows} rows, the report says {exp.get(split)}"
                 )
-            if labels.get(0, 0) != labels.get(1, 0):
-                errors.append(f"{config}/{split}: classes are not 1:1 ({dict(labels)})")
+            # The TextFooler test split has two benign twins (plain and perturbed) per variant.
+            ratio = 2 if (config, split) == ("bipia_textfooler", "test") else 1
+            if labels.get(0, 0) != ratio * labels.get(1, 0):
+                errors.append(f"{config}/{split}: classes are not {ratio}:1 ({dict(labels)})")
             if len(set(ids)) != len(ids):
                 errors.append(f"{config}/{split}: duplicate sample_id")
             if split_col != {split}:
@@ -219,7 +253,7 @@ def _pct(a: float, b: float) -> str:
     return f"{a / b:.1%}" if b else "n/a"
 
 
-def _front_matter(cfg: Config, configs: list[str]) -> str:
+def _front_matter(cfg: Config, configs: list[str], version: str = "v0") -> str:
     meta: dict[str, Any] = {
         "pretty_name": cfg.dataset.pretty_name,
         "license": cfg.dataset.license,
@@ -230,7 +264,9 @@ def _front_matter(cfg: Config, configs: list[str]) -> str:
         "configs": [
             {
                 "config_name": c,
-                "data_files": [{"split": s, "path": f"{c}/{s}.parquet"} for s in SPLITS[c]],
+                "data_files": [
+                    {"split": s, "path": f"{c}/{s}.parquet"} for s in splits(c, version)
+                ],
                 **({"default": True} if c == "bipia" else {}),
             }
             for c in configs
@@ -351,7 +387,7 @@ def _textfooler_section(cfg: Config, reports: dict[str, dict[str, Any]]) -> list
         "rules (only word swaps, caps, protected tokens unchanged, nothing else in the document "
         "changed) and by an LLM judge: an attacked variant must still be judged an injection, "
         "a clean one must still be judged clean. The judge is a local model "
-        f"(`{info.get('judge', tf.judge_model)}`), different from the victim, and never writes "
+        f"(`{info.get('judge', tf.judge.model)}`), different from the victim, and never writes "
         "text.",
         f"- **Sizes:** target {tf.targets} kept malicious variants per scenario (floor "
         f"{tf.floor_per_scenario}); the same number of plain benign twins (`control`, copied "
@@ -398,6 +434,39 @@ def _textfooler_section(cfg: Config, reports: dict[str, dict[str, Any]]) -> list
     ]
 
 
+def _training_section(cfg: Config, reports: dict[str, dict[str, Any]]) -> list[str]:
+    """v2: how the training variants of `bipia_textfooler` were made (P8)."""
+    p8 = reports.get("p8")
+    if not p8:
+        return []
+    info, overall, assembly = p8.get("info", {}), p8.get("overall", {}), p8.get("assembly") or {}
+    rows = [
+        [s, a.get("per_class"), ", ".join(str(k) for k, v in a.get("nested", {}).items() if v)]
+        for s, a in assembly.items()
+    ]
+    return [
+        "## How the `bipia_textfooler` training variants were built (v2)",
+        "",
+        f"- **Generator:** `{info.get('generator')}` (revision {info.get('generator_revision')}), "
+        "run locally; not a Mistral model. It rewrites the inserted text of a `bipia` train or "
+        "validation row TextFooler-style: close synonyms, same order, same meaning.",
+        f"- **Judge:** `{info.get('judge')}`, a different model from the generator (and from the "
+        "test-set judge). The original's label is checked first, then the variant must keep its "
+        "meaning and label.",
+        f"- **Rules:** at most {cfg.textfooler.max_span_fraction:.0%} of the words changed, word "
+        "count within 10%, protected tokens and code blocks unchanged, the rest of the document "
+        "unchanged.",
+        "- **Selection:** every variant the judge accepts; classes balanced per split. "
+        f"{overall.get('kept', 'n/a')} variants passed "
+        f"({overall.get('pass_rate') or 0:.1%} of those written).",
+        "- `p_yes_base` is base Shieldstral's score, for information: no variant was "
+        "selected on it.",
+        "",
+        _table(["split", "rows per class", "nested subsets"], rows) if rows else "",
+        "",
+    ]
+
+
 def build_card(
     cfg: Config,
     configs: list[str],
@@ -414,7 +483,7 @@ def build_card(
     by_split = p4["p4_bipia"]["by_split"]
     share = cfg.p3.hard_negatives.share
 
-    out: list[str] = [_front_matter(cfg, configs)]
+    out: list[str] = [_front_matter(cfg, configs, version)]
     out += [
         f"# {cfg.dataset.pretty_name}",
         "",
@@ -443,7 +512,7 @@ def build_card(
         "",
     ]
     for c in configs:
-        for s in SPLITS[c]:
+        for s in splits(c, version):
             out.append(
                 f'ds = load_dataset("{cfg.dataset.repo_id}", "{c}", split="{s}", '
                 f'revision="{version}")'
@@ -581,6 +650,8 @@ def build_card(
         ]
     if "bipia_textfooler" in configs:
         out += _textfooler_section(cfg, reports)
+    if version == "v2":
+        out += _training_section(cfg, reports)
 
     # Columns
     out += [
@@ -588,7 +659,8 @@ def build_card(
         "",
         f"Every config has the same {len(COLUMNS)} columns, in the same order"
         + (
-            "; `bipia_textfooler` adds one, `p_yes_base`, at the end"
+            "; `bipia_textfooler` adds four at the end (`p_yes_base`, `generator_model`, "
+            "`judge_model`, `nested_size`)"
             if "bipia_textfooler" in configs
             else ""
         )
@@ -620,7 +692,17 @@ def build_card(
                         [
                             "`p_yes_base`",
                             "`bipia_textfooler` only: base Shieldstral's p(yes) on the row",
-                        ]
+                        ],
+                        [
+                            "`generator_model`, `judge_model`",
+                            "`bipia_textfooler` only: the LLM that wrote a training variant "
+                            "(empty on test rows) and the model that judged the row",
+                        ],
+                        [
+                            "`nested_size`",
+                            "training variants: the smallest nested training subset "
+                            "(500 / 1,000 / 2,000 / 4,000) holding the row",
+                        ],
                     ]
                     if "bipia_textfooler" in configs
                     else []
@@ -685,12 +767,11 @@ def stage(
     if out_dir.exists():
         shutil.rmtree(out_dir)
     files: list[Path] = []
-    for config in [] if card_only else new_configs(version):
-        for split in SPLITS[config]:
-            dst = out_dir / config / f"{split}.parquet"
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(parquet_path(cfg, config, split), dst)
-            files.append(dst)
+    for config, split in [] if card_only else new_files(version):
+        dst = out_dir / config / f"{split}.parquet"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(parquet_path(cfg, config, split), dst)
+        files.append(dst)
     out_dir.mkdir(parents=True, exist_ok=True)
     readme = out_dir / "README.md"
     readme.write_text(card, encoding="utf-8", newline="\n")
@@ -825,7 +906,7 @@ def verify(cfg: Config, version: str) -> dict[str, Any]:
 
 def _load_at(cfg: Config, rev: str, configs: list[str], token: str, env: dict, work: Path) -> dict:
     env = {**env, "HF_HOME": str(work / f"c{rev}")}
-    pairs = [[c, s] for c in configs for s in SPLITS[c]]
+    pairs = [[c, s] for c in configs for s in splits(c, rev)]
     proc = subprocess.run(
         [
             "uv",
@@ -857,7 +938,7 @@ def _count_errors(loaded: dict, configs: list[str], reports: dict, rev: str) -> 
     errors = []
     for c in configs:
         exp = expected_rows(reports, c)
-        for s in SPLITS[c]:
+        for s in splits(c, rev):
             got = loaded.get(f"{c}/{s}", {})
             if got.get("rows") != exp.get(s):
                 errors.append(
@@ -907,7 +988,9 @@ def _verify_in(
                 cfg.dataset.repo_id, repo_type="dataset", revision="v0", local_dir=str(work / "f0")
             )
         )
-        rels = [f"{c}/{s}.parquet" for c in v0_configs for s in SPLITS[c]]
+        rels = [f"{c}/{s}.parquet" for c in v0_configs for s in splits(c, "v0")]
+        if version == "v2":  # the v1 test file must be unchanged too
+            rels += [f"{c}/{sp}.parquet" for c, sp in new_files("v1")]
         diff = compare_files(local0, local, rels)
         errors += [f"v0 file changed in {version}: {d}" for d in diff]
         v0_unchanged = {"loaded": loaded_v0, "files_compared": rels, "differences": diff}
@@ -1081,7 +1164,7 @@ def run(
     cfg = cfg or load_config()
     configs = configs_of(version)
     reports = load_reports(cfg, version)
-    stats = preflight(cfg, configs, reports)  # all configs of the version, v0 files included
+    stats = preflight(cfg, configs, reports, version)  # all configs of the version
     reports["rows_per_doc"] = rows_per_doc(cfg)
     reports["hn_share"] = hn_share(cfg)
     card = build_card(cfg, configs, reports, stats, version)
@@ -1094,7 +1177,7 @@ def run(
         "action": ("card update" if card_only else "push") if do_push else "dry-run",
         "version": version,
         "configs": configs,
-        "uploads": [] if card_only else new_configs(version),
+        "uploads": [] if card_only else [f"{c}/{sp}" for c, sp in new_files(version)],
         "files": stats,
         "gate": gate,
         "card_sha256": hashlib.sha256(card.encode()).hexdigest(),

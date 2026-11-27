@@ -42,20 +42,28 @@ def make_pairs(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def stratified_order(
-    pairs: list[dict[str, Any]], cfg: Config, scenario: str, *, translation: bool = False
+    pairs: list[dict[str, Any]],
+    cfg: Config,
+    scenario: str,
+    *,
+    translation: bool = False,
+    salt: str = "p6",
+    max_per_doc: int | None = -1,
 ) -> list[dict[str, Any]]:
     """The attempt order of one scenario: round-robin over the strata (attack group x position),
     each stratum shuffled with the seed, at most `max_per_doc` pairs per document.
 
-    `translation` selects the separate translation slice instead of the main set."""
+    `translation` selects the separate translation slice instead of the main set. `salt` names
+    the seed stream (P8 uses its own); `max_per_doc` defaults to the P6 setting, None = no cap."""
     tf = cfg.textfooler
+    cap = tf.max_per_doc if max_per_doc == -1 else max_per_doc
     group = tf.translation_group
     strata: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
     for p in pairs:
         if p["scenario"] != scenario or (p["attack_group"] == group) != translation:
             continue
         strata[(p["attack_group"], p["position"])].append(p)
-    r = rng(f"p6:order:{scenario}:{'translation' if translation else 'main'}", cfg)
+    r = rng(f"{salt}:order:{scenario}:{'translation' if translation else 'main'}", cfg)
     for key in sorted(strata):
         strata[key].sort(key=lambda p: p["pair_id"])
         r.shuffle(strata[key])
@@ -71,7 +79,7 @@ def stratified_order(
             while pos[key] < len(items):
                 p = items[pos[key]]
                 pos[key] += 1
-                if used[p["doc"]] >= tf.max_per_doc:
+                if cap is not None and used[p["doc"]] >= cap:
                     continue  # this document is full: look at the next pair of the stratum
                 used[p["doc"]] += 1
                 out.append(p)
